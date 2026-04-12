@@ -1,0 +1,55 @@
+﻿'use client';
+
+import { useCallback } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db/schema';
+import { useSyncStore } from '@/store/syncStore';
+import { useAuthStore } from '@/store/authStore';
+import { runSync } from '@/lib/blockchain/sync';
+
+export function useSync() {
+  const { session } = useAuthStore();
+  const {
+    isSyncing,
+    lastResult,
+    lastSyncTime,
+    setSyncing,
+    setLastResult,
+    setPending,
+    incrementRetry,
+    resetRetry,
+  } = useSyncStore();
+
+  const pendingCount =
+    useLiveQuery(async () => {
+      const pendingVaccinations = await db.vaccinations.where('syncStatus').equals('pending').count();
+      const pendingPatients = await db.patients.where('syncStatus').equals('pending').count();
+      return pendingVaccinations + pendingPatients;
+    }, []) ?? 0;
+
+  const sync = useCallback(async () => {
+    if (!session || isSyncing) return;
+
+    setSyncing(true);
+    try {
+      const result = await runSync(session);
+      setLastResult(result);
+      setPending(
+        (await db.vaccinations.where('syncStatus').equals('pending').count()) +
+          (await db.patients.where('syncStatus').equals('pending').count())
+      );
+      if (result.success) {
+        resetRetry();
+      } else {
+        incrementRetry();
+      }
+    } catch (_error) {
+      incrementRetry();
+    } finally {
+      setSyncing(false);
+    }
+  }, [incrementRetry, isSyncing, resetRetry, session, setLastResult, setPending, setSyncing]);
+
+  return { sync, isSyncing, lastResult, lastSyncTime, pendingCount };
+}
+
