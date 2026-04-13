@@ -12,8 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { sendSMS } from '@/lib/notifications/sms';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
+import { CLINIC_LOCATIONS } from '@/lib/data/clinicLocations';
 
 export default function ProgramDetailPage() {
   useAuth('donor');
@@ -23,7 +25,12 @@ export default function ProgramDetailPage() {
   const [open, setOpen] = useState(false);
   const [clinicName, setClinicName] = useState('');
   const [clinicEmail, setClinicEmail] = useState('');
-  const [clinicLocation, setClinicLocation] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedLGA, setSelectedLGA] = useState('');
+
+  const countryData = CLINIC_LOCATIONS.find((country) => country.id === selectedCountry);
+  const stateData = countryData?.states.find((state) => state.id === selectedState);
 
   const program = useLiveQuery(() => db.programs.get(id), [id]);
   const patients = useLiveQuery(() => db.patients.where('programId').equals(id).toArray(), [id]);
@@ -42,7 +49,9 @@ export default function ProgramDetailPage() {
         <Card>
           <CardContent className="p-4">
             <h1 className="text-2xl font-semibold text-gray-900">{program.name}</h1>
-            <p className="text-sm text-gray-600">Status: {program.status} • Created {new Date(program.createdAt).toLocaleDateString()}</p>
+            <p className="text-sm text-gray-600">
+              Status: {program.status} • Created {new Date(program.createdAt).toLocaleDateString()}
+            </p>
           </CardContent>
         </Card>
 
@@ -102,7 +111,9 @@ export default function ProgramDetailPage() {
             {(grants ?? []).map((grant) => (
               <div key={grant.id} className="rounded-lg border border-gray-200 p-3 text-sm">
                 <p className="font-semibold text-gray-900">{grant.patientName}</p>
-                <p className="text-xs text-gray-600">{grant.milestoneName} • ${grant.amount}</p>
+                <p className="text-xs text-gray-600">
+                  {grant.milestoneName} • ${grant.amount}
+                </p>
               </div>
             ))}
           </CardContent>
@@ -129,11 +140,54 @@ export default function ProgramDetailPage() {
       <Modal open={open} onClose={() => setOpen(false)} title="Credential New Clinic">
         <div className="space-y-3">
           <Input placeholder="Clinic name" value={clinicName} onChange={(event) => setClinicName(event.target.value)} />
-          <Input placeholder="Clinic email" value={clinicEmail} onChange={(event) => setClinicEmail(event.target.value)} />
-          <Input placeholder="Location" value={clinicLocation} onChange={(event) => setClinicLocation(event.target.value)} />
+          <Input
+            placeholder="Clinic email"
+            type="email"
+            value={clinicEmail}
+            onChange={(event) => setClinicEmail(event.target.value)}
+          />
+
+          <Select
+            value={selectedCountry}
+            onChange={(event) => {
+              setSelectedCountry(event.target.value);
+              setSelectedState('');
+              setSelectedLGA('');
+            }}
+            options={CLINIC_LOCATIONS.map((country) => ({ value: country.id, label: country.name }))}
+            placeholder="Select country"
+          />
+
+          <Select
+            value={selectedState}
+            onChange={(event) => {
+              setSelectedState(event.target.value);
+              setSelectedLGA('');
+            }}
+            options={(countryData?.states ?? []).map((state) => ({ value: state.id, label: state.name }))}
+            placeholder="Select state / region"
+            disabled={!countryData}
+          />
+
+          <Select
+            value={selectedLGA}
+            onChange={(event) => setSelectedLGA(event.target.value)}
+            options={(stateData?.lgas ?? []).map((lga) => ({ value: lga.id, label: lga.name }))}
+            placeholder="Select LGA"
+            disabled={!stateData}
+          />
+
           <Button
             className="w-full"
             onClick={async () => {
+              const selectedLGAData = stateData?.lgas.find((lga) => lga.id === selectedLGA);
+              if (!clinicName || !clinicEmail || !countryData || !stateData || !selectedLGAData) {
+                toast.error('Please complete all clinic fields before saving.');
+                return;
+              }
+
+              const clinicLocation = `${countryData.name} > ${stateData.name} > ${selectedLGAData.name}`;
+
               await db.clinics.put({
                 id: uuidv4(),
                 name: clinicName,
@@ -146,7 +200,9 @@ export default function ProgramDetailPage() {
               setOpen(false);
               setClinicName('');
               setClinicEmail('');
-              setClinicLocation('');
+              setSelectedCountry('');
+              setSelectedState('');
+              setSelectedLGA('');
             }}
           >
             Save Clinic Credential
@@ -156,5 +212,4 @@ export default function ProgramDetailPage() {
     </main>
   );
 }
-
 

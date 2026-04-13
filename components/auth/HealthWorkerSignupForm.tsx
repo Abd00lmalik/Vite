@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { db } from '@/lib/db/schema';
 import { buildSession, registerUser } from '@/lib/auth/session';
 import { useAuthStore } from '@/store/authStore';
+import { CLINIC_LOCATIONS } from '@/lib/data/clinicLocations';
 
 const schema = z
   .object({
@@ -41,18 +42,28 @@ function strengthLabel(password: string) {
 export function HealthWorkerSignupForm() {
   const router = useRouter();
   const login = useAuthStore((state) => state.login);
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedLGA, setSelectedLGA] = useState('');
 
   const {
     register,
     handleSubmit,
+    setValue,
     watch,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
+    defaultValues: {
+      clinicLocation: '',
+    },
   });
 
   const password = watch('password', '');
   const strength = useMemo(() => strengthLabel(password), [password]);
+
+  const countryData = CLINIC_LOCATIONS.find((country) => country.id === selectedCountry);
+  const stateData = countryData?.states.find((state) => state.id === selectedState);
 
   const onSubmit = async (values: FormValues) => {
     const clinicId = `clinic-${values.clinicName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)}`;
@@ -100,54 +111,102 @@ export function HealthWorkerSignupForm() {
 
   return (
     <form className="space-y-3" onSubmit={handleSubmit(onSubmit)}>
+      <input type="hidden" {...register('clinicLocation')} />
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Full name</label>
         <Input {...register('fullName')} />
         {errors.fullName ? <p className="mt-1 text-sm text-red-600">{errors.fullName.message}</p> : null}
       </div>
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
         <Input type="email" {...register('email')} />
         {errors.email ? <p className="mt-1 text-sm text-red-600">{errors.email.message}</p> : null}
       </div>
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
         <Input type="password" {...register('password')} />
         <p className="mt-1 text-xs text-gray-500">Strength: {strength}</p>
       </div>
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Confirm password</label>
         <Input type="password" {...register('confirmPassword')} />
         {errors.confirmPassword ? <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p> : null}
       </div>
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Clinic name</label>
         <Input {...register('clinicName')} />
       </div>
+
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Clinic location (LGA/State)</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Country</label>
         <Select
-          options={[
-            { value: 'Nassarawa, Kano', label: 'Nassarawa, Kano' },
-            { value: 'Ibadan North, Oyo', label: 'Ibadan North, Oyo' },
-            { value: 'Mushin, Lagos', label: 'Mushin, Lagos' },
-          ]}
-          {...register('clinicLocation')}
+          value={selectedCountry}
+          onChange={(event) => {
+            setSelectedCountry(event.target.value);
+            setSelectedState('');
+            setSelectedLGA('');
+            setValue('clinicLocation', '', { shouldValidate: true });
+          }}
+          placeholder="Select country"
+          options={CLINIC_LOCATIONS.map((country) => ({ value: country.id, label: country.name }))}
         />
       </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">State / Region</label>
+        <Select
+          value={selectedState}
+          onChange={(event) => {
+            setSelectedState(event.target.value);
+            setSelectedLGA('');
+            setValue('clinicLocation', '', { shouldValidate: true });
+          }}
+          placeholder="Select state"
+          disabled={!countryData}
+          options={(countryData?.states ?? []).map((state) => ({ value: state.id, label: state.name }))}
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">LGA</label>
+        <Select
+          value={selectedLGA}
+          onChange={(event) => {
+            const lgaId = event.target.value;
+            setSelectedLGA(lgaId);
+            const lga = stateData?.lgas.find((item) => item.id === lgaId);
+            if (countryData && stateData && lga) {
+              setValue('clinicLocation', `${countryData.name} > ${stateData.name} > ${lga.name}`, {
+                shouldValidate: true,
+              });
+            }
+          }}
+          placeholder="Select LGA"
+          disabled={!stateData}
+          options={(stateData?.lgas ?? []).map((lga) => ({ value: lga.id, label: lga.name }))}
+        />
+        {errors.clinicLocation ? <p className="mt-1 text-sm text-red-600">{errors.clinicLocation.message}</p> : null}
+      </div>
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Staff ID / verification</label>
         <Input {...register('staffId')} />
       </div>
+
       <div>
         <label className="mb-1 block text-sm font-medium text-gray-700">Role title</label>
         <Input {...register('roleTitle')} />
       </div>
+
       <Button type="submit" className="w-full" loading={isSubmitting}>
         Create account
       </Button>
     </form>
   );
 }
-
 
