@@ -1,6 +1,6 @@
-﻿'use client';
+'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { Button } from '@/components/ui/button';
@@ -16,12 +16,43 @@ interface RedeemFlowProps {
   onComplete: () => void;
 }
 
+const PROCESSING_STEPS = [
+  'Processing your transfer...',
+  'Verifying your account...',
+  'Initiating mobile money transfer...',
+];
+
+function maskPhone(phone: string) {
+  const compact = phone.replace(/\s+/g, '');
+  if (compact.length <= 4) return compact;
+  return `${compact.slice(0, Math.max(0, compact.length - 4)).replace(/\d/g, 'X')}${compact.slice(-4)}`;
+}
+
 export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
   const [step, setStep] = useState<'confirm' | 'processing' | 'success'>('confirm');
   const [phone, setPhone] = useState(patient.parentPhone);
   const [receiptId, setReceiptId] = useState('');
-  const available = grants.filter((grant) => grant.status === 'released');
-  const amount = available.reduce((sum, grant) => sum + grant.amount, 0);
+  const [progressIndex, setProgressIndex] = useState(0);
+
+  const available = useMemo(() => grants.filter((grant) => grant.status === 'released'), [grants]);
+  const amount = useMemo(() => available.reduce((sum, grant) => sum + grant.amount, 0), [available]);
+
+  useEffect(() => {
+    if (step !== 'processing') return;
+    setProgressIndex(0);
+
+    const timer = window.setInterval(() => {
+      setProgressIndex((prev) => {
+        if (prev >= PROCESSING_STEPS.length - 1) {
+          window.clearInterval(timer);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 700);
+
+    return () => window.clearInterval(timer);
+  }, [step]);
 
   if (step === 'success') {
     return (
@@ -45,12 +76,16 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
     return (
       <Card>
         <CardContent className="space-y-3 p-5 text-sm text-gray-700">
-          <p>Processing your transfer...</p>
-          <p>Verifying your account...</p>
-          <p>Initiating mobile money transfer...</p>
-          <div className="h-1 w-full overflow-hidden rounded bg-gray-200">
-            <div className="h-1 w-1/2 animate-pulse rounded bg-teal-primary" />
-          </div>
+          {PROCESSING_STEPS.map((label, index) => (
+            <div key={label} className="flex items-center gap-2">
+              {index <= progressIndex ? (
+                <span className="text-green-600">✓</span>
+              ) : (
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-teal-primary" />
+              )}
+              <p className={index <= progressIndex ? 'text-green-700' : 'text-gray-600'}>{label}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
     );
@@ -59,7 +94,9 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
-        <p className="text-sm text-gray-700">You have ${amount.toFixed(2)} available. Confirm transfer to this number.</p>
+        <p className="text-sm text-gray-700">
+          You have ${amount.toFixed(2)} available. Confirm transfer to {maskPhone(phone)}?
+        </p>
         <input
           value={phone}
           onChange={(event) => setPhone(event.target.value)}
@@ -69,7 +106,7 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
           className="w-full"
           onClick={async () => {
             setStep('processing');
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 2100));
 
             const transactionId = `VH-${uuidv4().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
             for (const grant of available) {
@@ -99,5 +136,3 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
     </Card>
   );
 }
-
-

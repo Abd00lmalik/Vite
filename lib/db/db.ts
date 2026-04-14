@@ -16,7 +16,8 @@ import type {
 } from '@/types';
 
 function buildHealthId(seed: string): string {
-  return `HD-${seed.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+  const entropy = `${seed.replace(/-/g, '')}${uuidv4().replace(/-/g, '')}`;
+  return `HD-${entropy.slice(-6).toUpperCase()}`;
 }
 
 export async function createUser(user: User): Promise<void> {

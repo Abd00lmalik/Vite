@@ -439,7 +439,7 @@ export async function seedDemoData(): Promise<void> {
       patientId: 'patient-001',
       raisedBy: 'donor-001',
       reason: 'Stock lot DTP-LOT-2025-001 record count exceeds registered doses.',
-      evidence: '102 records vs 100 registered doses.',
+      evidence: '102 records vs 100 registered doses - discrepancy of 2.',
       status: 'under-review',
       createdAt: '2025-03-01T12:00:00.000Z',
     },
@@ -496,11 +496,11 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: uuidv4(),
-      to: '+2348012345001',
+      to: '+2348012345004',
       type: 'reminder',
-      message: 'VITE Health: Adebayo Oluwaseun is due for Measles vaccination by 07 Apr 2025.',
+      message: 'VITE Health: Aisha Bello is due for DTP Dose 2 vaccination by 17 May 2025.',
       status: 'simulated',
-      timestamp: '2025-03-30T08:00:00.000Z',
+      timestamp: '2025-05-10T08:00:00.000Z',
     },
     {
       id: uuidv4(),

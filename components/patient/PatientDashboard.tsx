@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CircleHelp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
@@ -15,6 +16,7 @@ import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import { NotificationBell } from '@/components/shared/NotificationBell';
 import { QRDisplay } from '@/components/shared/QRDisplay';
+import { QRScanner } from '@/components/shared/QRScanner';
 import { EarningsCard } from './EarningsCard';
 import { VaccinationTimeline } from './VaccinationTimeline';
 import { MilestoneTracker } from './MilestoneTracker';
@@ -24,15 +26,16 @@ import { PageSkeleton } from '@/components/shared/PageSkeleton';
 export function PatientDashboard() {
   const mounted = useMounted();
   const { session } = useAuth('patient');
-  const { patient, vaccinations, grants } = usePatient();
+  const { patient, vaccinations, grants, lookup, error } = usePatient();
   const logout = useAuthStore((state) => state.logout);
   const router = useRouter();
   const [showRedeem, setShowRedeem] = useState(false);
+  const [lookupValue, setLookupValue] = useState('');
 
-  const program = useLiveQuery(
-    () => (patient?.programId ? db.programs.get(patient.programId) : Promise.resolve(undefined)),
-    [patient?.programId]
-  );
+  const program = useLiveQuery(async () => {
+    if (!patient?.programId) return undefined;
+    return db.programs.get(patient.programId);
+  }, [patient?.programId]);
 
   const totals = useMemo(() => {
     const totalEarned = grants.reduce((sum, grant) => sum + grant.amount, 0);
@@ -79,6 +82,38 @@ export function PatientDashboard() {
       </header>
 
       <section className="mx-auto max-w-5xl space-y-4 px-4 py-4 md:px-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Find Record</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <Input
+                placeholder="Enter phone number or Health ID"
+                value={lookupValue}
+                onChange={(event) => setLookupValue(event.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => lookup(lookupValue)}
+                className="w-full sm:w-auto"
+              >
+                Find
+              </Button>
+            </div>
+            <QRScanner
+              onScan={(value) => {
+                void lookup(value);
+              }}
+              onManualPhoneLookup={(phone) => {
+                void lookup(phone);
+              }}
+            />
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          </CardContent>
+        </Card>
+
         {patient ? (
           <Card className="bg-teal-primary text-white">
             <CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">

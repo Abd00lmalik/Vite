@@ -23,6 +23,7 @@ export default function PublicRecordPage() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [records, setRecords] = useState<VaccinationRecord[]>([]);
   const [manualId, setManualId] = useState('');
+  const [verification, setVerification] = useState<{ merkleRoot: string; txHash: string } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -36,11 +37,28 @@ export default function PublicRecordPage() {
       if (!found) {
         setPatient(null);
         setRecords([]);
+        setVerification(null);
         return;
       }
       setPatient(found);
       const history = await db.vaccinations.where('patientId').equals(found.id).sortBy('dateAdministered');
       setRecords(history);
+
+      const firstSyncedRecord = history.find((item) => item.syncStatus === 'synced');
+      if (!firstSyncedRecord) {
+        setVerification(null);
+        return;
+      }
+
+      const batches = await db.syncBatches.toArray();
+      const sourceBatch = batches.find((batch) =>
+        batch.records.some((record) => record.id === firstSyncedRecord.id)
+      );
+
+      setVerification({
+        merkleRoot: sourceBatch?.merkleRoot ?? 'N/A',
+        txHash: firstSyncedRecord.xionTxHash ?? sourceBatch?.xionTxHash ?? 'N/A',
+      });
     };
 
     load().catch(() => undefined);
@@ -85,6 +103,7 @@ export default function PublicRecordPage() {
                 <div>
                   <h1 className="text-2xl font-bold text-teal-dark">{patient.name}</h1>
                   <p className="font-mono text-sm text-teal-dark">{patient.healthDropId}</p>
+                  <p className="text-sm text-teal-dark/80">DOB: {new Date(patient.dateOfBirth).toLocaleDateString()}</p>
                   <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm text-green-700">
                     <CheckCircle2 className="h-4 w-4" /> Verified health record
                   </p>
@@ -126,8 +145,13 @@ export default function PublicRecordPage() {
                 <CardContent className="space-y-1 p-4 text-sm text-gray-700">
                   <p className="font-semibold text-teal-dark">Blockchain verification</p>
                   <p>This record is anchored on the XION blockchain.</p>
-                  <p>Merkle root: {firstSynced?.xionTxHash ? `0x${firstSynced.xionTxHash.slice(2, 18)}...` : 'N/A'}</p>
-                  <p>Tx: {firstSynced?.xionTxHash ?? 'N/A'}. Independently verifiable.</p>
+                  <p>
+                    Merkle root:{' '}
+                    {verification?.merkleRoot && verification.merkleRoot !== 'N/A'
+                      ? `${verification.merkleRoot.slice(0, 14)}...${verification.merkleRoot.slice(-8)}`
+                      : 'N/A'}
+                  </p>
+                  <p>Tx: {verification?.txHash ?? firstSynced?.xionTxHash ?? 'N/A'}. Independently verifiable.</p>
                 </CardContent>
               </Card>
             ) : null}

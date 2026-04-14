@@ -23,7 +23,7 @@ export function MilestoneTracker({ milestones, records }: MilestoneTrackerProps)
       caption: completed
         ? `Completed • $${milestone.grantAmount}`
         : `Pending • $${milestone.grantAmount}`,
-      status: completed ? 'complete' : 'pending',
+      status: completed ? ('complete' as const) : ('pending' as const),
     };
   });
 

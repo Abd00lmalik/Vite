@@ -1,11 +1,8 @@
-﻿import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/db/schema';
+import { getPendingPatients, getPendingVaccinations } from '@/lib/db/db';
 import { buildMerkleTree } from '@/lib/utils/merkle';
-import {
-  GrantEscrow,
-  MilestoneCheckerContract,
-  VaccinationRecordContract,
-} from '@/lib/blockchain/contracts';
+import { GrantEscrow, MilestoneChecker, VaccinationRecordContract } from '@/lib/blockchain/contracts';
 import { DEMO_VACCINE_LOTS } from '@/lib/seed/demo';
 import { sendSMS } from '@/lib/notifications/sms';
 import { scheduleReminder } from '@/lib/notifications/reminders';
@@ -17,11 +14,11 @@ export type SyncProgressUpdate =
   | 'Building Merkle tree...'
   | 'Submitting batch to XION...'
   | 'Marking records as synced...'
-  | 'Evaluating milestones...'
+  | 'Checking milestones...'
   | 'Releasing grants...'
   | 'Sending SMS notifications...'
-  | 'Writing audit trail...'
-  | 'Sync complete';
+  | 'Writing audit log...'
+  | 'Sync complete.';
 
 export async function runSync(
   session: AuthSession,
@@ -32,12 +29,12 @@ export async function runSync(
   const notifications: string[] = [];
   const progress = (step: SyncProgressUpdate) => onProgress?.(step);
 
+  // PHASE 1: Gather all pending records from IndexedDB
   progress('Gathering pending records...');
-  const pendingVaccinations = await db.vaccinations.where('syncStatus').equals('pending').toArray();
-  const pendingPatients = await db.patients.where('syncStatus').equals('pending').toArray();
+  const pendingVaccinations = await getPendingVaccinations();
+  const pendingPatients = await getPendingPatients();
 
   if (pendingVaccinations.length === 0 && pendingPatients.length === 0) {
-    progress('Sync complete');
     return {
       success: true,
       batchId: 'no-op',
@@ -48,6 +45,7 @@ export async function runSync(
     };
   }
 
+  // PHASE 2: Stock reconciliation check
   progress('Running stock reconciliation...');
   const flagged: string[] = [];
   for (const record of pendingVaccinations) {
@@ -59,6 +57,8 @@ export async function runSync(
     }
   }
 
+  // PHASE 3: Build Merkle tree for unflagged records
+  progress('Building Merkle tree...');
   const validRecords = pendingVaccinations.filter((record) => !flagged.includes(record.id));
   if (validRecords.length === 0 && pendingPatients.length === 0) {
     return {
@@ -68,13 +68,14 @@ export async function runSync(
       merkleRoot: '0x0',
       grantsReleased: 0,
       errors,
+      flaggedCount: flagged.length,
     };
   }
 
-  progress('Building Merkle tree...');
   const { root, leaves } = buildMerkleTree(validRecords);
   const batchId = uuidv4();
 
+  // PHASE 4: Submit batch
   progress('Submitting batch to XION...');
   const { txHash } = await VaccinationRecordContract.submitBatch(
     root,
@@ -83,6 +84,7 @@ export async function runSync(
     session.userId
   );
 
+  // PHASE 5: Mark records as synced
   progress('Marking records as synced...');
   for (const record of validRecords) {
     await db.vaccinations.update(record.id, {
@@ -92,6 +94,7 @@ export async function runSync(
   }
   await db.patients.where('syncStatus').equals('pending').modify({ syncStatus: 'synced' });
 
+  // PHASE 6: Save sync batch
   await db.syncBatches.put({
     id: batchId,
     records: validRecords,
@@ -103,7 +106,8 @@ export async function runSync(
     recordCount: validRecords.length,
   });
 
-  progress('Evaluating milestones...');
+  // PHASE 7+: Milestone + release pipeline per record
+  progress('Checking milestones...');
   for (const record of validRecords) {
     const patient = await db.patients.get(record.patientId);
     if (!patient?.programId) continue;
@@ -111,7 +115,13 @@ export async function runSync(
     const program = await db.programs.get(patient.programId);
     if (!program || program.status !== 'active') continue;
 
-    await MilestoneCheckerContract.evaluateMilestones(program.id, batchId, session.userId);
+    const milestoneCheck = await MilestoneChecker.checkMilestone(
+      patient.id,
+      record.vaccineName,
+      record.doseNumber,
+      program.id
+    );
+    if (!milestoneCheck.satisfied) continue;
 
     const milestone = program.milestones.find(
       (item) => item.vaccineName === record.vaccineName && item.doseNumber === record.doseNumber
@@ -149,7 +159,9 @@ export async function runSync(
 
     await db.programs.update(patient.programId, {
       milestones: program.milestones.map((item) =>
-        item.id === milestone.id ? { ...item, completedCount: item.completedCount + 1 } : item
+        item.id === milestone.id
+          ? { ...item, completedCount: item.completedCount + 1 }
+          : item
       ),
       totalReleased: (program.totalReleased || 0) + milestone.grantAmount,
     });
@@ -173,7 +185,8 @@ export async function runSync(
     notifications.push(`Grant $${milestone.grantAmount} released to ${patient.name}`);
   }
 
-  progress('Writing audit trail...');
+  // PHASE 13: Audit log
+  progress('Writing audit log...');
   await db.auditLogs.put({
     id: uuidv4(),
     entityId: batchId,
@@ -194,7 +207,7 @@ export async function runSync(
     });
   }
 
-  progress('Sync complete');
+  progress('Sync complete.');
   return {
     success: true,
     batchId,
@@ -206,4 +219,3 @@ export async function runSync(
     flaggedCount: flagged.length,
   };
 }
-
