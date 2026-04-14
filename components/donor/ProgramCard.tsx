@@ -9,9 +9,10 @@ interface ProgramCardProps {
   program: Program;
   enrolledPatients: number;
   onToggleStatus: (program: Program) => void;
+  onFund: (program: Program) => void;
 }
 
-export function ProgramCard({ program, enrolledPatients, onToggleStatus }: ProgramCardProps) {
+export function ProgramCard({ program, enrolledPatients, onToggleStatus, onFund }: ProgramCardProps) {
   const milestoneTotal = program.milestones.reduce((sum, milestone) => sum + milestone.completedCount + milestone.pendingCount, 0);
   const milestoneCompleted = program.milestones.reduce((sum, milestone) => sum + milestone.completedCount, 0);
   const progress = milestoneTotal > 0 ? (milestoneCompleted / milestoneTotal) * 100 : 0;
@@ -32,6 +33,20 @@ export function ProgramCard({ program, enrolledPatients, onToggleStatus }: Progr
           <p>Escrow: ${program.escrowBalance.toFixed(2)}</p>
           <p>Released: ${program.totalReleased.toFixed(2)}</p>
           <p>Balance: ${(program.escrowBalance - program.totalReleased).toFixed(2)}</p>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-500">Escrow Balance</p>
+            <p className="text-xl font-bold text-teal-primary">${program.escrowBalance.toLocaleString()}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onFund(program)}
+            className="rounded-lg bg-teal-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-dark"
+          >
+            + Fund Program
+          </button>
         </div>
 
         <div>

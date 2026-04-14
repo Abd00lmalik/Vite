@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Syringe, UserPlus, Users } from 'lucide-react';
+import { CircleHelp, Syringe, UserPlus, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
@@ -61,6 +61,12 @@ export function HWDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/how-it-works">
+              <Button variant="outline" className="h-10 px-3">
+                <CircleHelp className="mr-1 h-4 w-4" />
+                Guide
+              </Button>
+            </Link>
             <NotificationBell />
             <Button
               variant="outline"

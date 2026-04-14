@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 export function SyncPanel() {
-  const { sync, isSyncing, lastResult, lastSyncTime, pendingCount } = useSync();
+  const { sync, isSyncing, lastResult, lastSyncTime, pendingCount, progressStep } = useSync();
   const isOnline = useOfflineStatus();
   const wasOffline = useRef(false);
 
@@ -45,17 +45,30 @@ export function SyncPanel() {
           {isSyncing ? 'Syncing...' : 'Sync Now'}
         </Button>
       </div>
+
       <div className="mt-2 text-xs text-gray-500">
         Last sync: {lastSyncTime ? new Date(lastSyncTime).toLocaleString() : 'Not synced yet'}
       </div>
+
+      {isSyncing && progressStep ? (
+        <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-dark">
+          <p className="font-medium">{progressStep}</p>
+        </div>
+      ) : null}
+
       {lastResult ? (
-        <div className="mt-2 text-sm text-gray-700">
-          {lastResult.recordCount} record(s) synced | ${lastResult.grantsReleased} grant(s) released
-          {lastResult.txHash ? ` | Tx ${lastResult.txHash.slice(0, 8)}...` : ''}
+        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+          <p>
+            {lastResult.recordCount} record(s) synced | ${lastResult.grantsReleased} grant(s) released
+          </p>
+          <p className="font-mono text-xs text-gray-500">
+            Root: {lastResult.merkleRoot === '0x0' ? '0x0' : `${lastResult.merkleRoot.slice(0, 10)}...`}
+          </p>
+          {lastResult.txHash ? (
+            <p className="font-mono text-xs text-gray-500">Tx: {`${lastResult.txHash.slice(0, 10)}...`}</p>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
 }
-
-

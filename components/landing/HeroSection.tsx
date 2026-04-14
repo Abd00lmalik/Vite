@@ -39,7 +39,7 @@ export function HeroSection() {
             </Link>
             <Link href="/auth/signin">
               <Button variant="outline" className="w-full border-white text-white hover:bg-white/20 sm:w-auto">
-                Sign In \u2192
+                Sign In
               </Button>
             </Link>
           </div>

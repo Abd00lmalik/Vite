@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
-import { Bell, Plus } from 'lucide-react';
+import { CircleHelp, Plus } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { useAuthStore } from '@/store/authStore';
@@ -23,7 +24,9 @@ import { TransactionTable } from './TransactionTable';
 import { DisputePanel } from './DisputePanel';
 import { ReportExporter } from './ReportExporter';
 import { AuditLogTable } from './AuditLogTable';
+import { FundingModal } from './FundingModal';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
+import type { Program } from '@/types';
 
 export function DonorDashboard() {
   const mounted = useMounted();
@@ -31,6 +34,7 @@ export function DonorDashboard() {
   const logout = useAuthStore((state) => state.logout);
   const router = useRouter();
   const [tab, setTab] = useState('overview');
+  const [fundingProgram, setFundingProgram] = useState<Program | null>(null);
 
   const programs = useLiveQuery(() => db.programs.toArray(), []);
   const grants = useLiveQuery(() => db.grantReleases.toArray(), []);
@@ -38,6 +42,14 @@ export function DonorDashboard() {
   const smsLogs = useLiveQuery(() => db.smsLogs.reverse().sortBy('timestamp'), []);
   const auditLogs = useLiveQuery(() => db.auditLogs.reverse().sortBy('timestamp'), []);
   const patients = useLiveQuery(() => db.patients.toArray(), []);
+  const totalEscrow = useLiveQuery(
+    () => db.programs.toArray().then((items) => items.reduce((sum, item) => sum + (item.escrowBalance ?? 0), 0)),
+    []
+  ) ?? 0;
+  const totalReleased = useLiveQuery(
+    () => db.programs.toArray().then((items) => items.reduce((sum, item) => sum + (item.totalReleased ?? 0), 0)),
+    []
+  ) ?? 0;
 
   const metrics = useMemo(() => {
     const enrolled = patients?.length ?? 0;
@@ -45,16 +57,14 @@ export function DonorDashboard() {
       (sum, program) => sum + program.milestones.reduce((acc, item) => acc + item.completedCount, 0),
       0
     );
-    const fundsReleased = (grants ?? []).reduce((sum, grant) => sum + grant.amount, 0);
-    const escrowBalance = (programs ?? []).reduce((sum, program) => sum + program.escrowBalance - program.totalReleased, 0);
 
     return {
       enrolled,
       milestonesComplete,
-      fundsReleased,
-      escrowBalance,
+      fundsReleased: totalReleased,
+      escrowBalance: totalEscrow,
     };
-  }, [grants, patients, programs]);
+  }, [patients, programs, totalEscrow, totalReleased]);
 
   if (!mounted || !session) {
     return <PageSkeleton />;
@@ -75,6 +85,12 @@ export function DonorDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/how-it-works">
+              <Button variant="outline" className="h-10 px-3">
+                <CircleHelp className="mr-1 h-4 w-4" />
+                Guide
+              </Button>
+            </Link>
             <NotificationBell />
             <Button
               variant="outline"
@@ -145,6 +161,7 @@ export function DonorDashboard() {
                 key={program.id}
                 program={program}
                 enrolledPatients={(patients ?? []).filter((patient) => patient.programId === program.id).length}
+                onFund={setFundingProgram}
                 onToggleStatus={async (item) => {
                   await db.programs.update(item.id, {
                     status: item.status === 'active' ? 'paused' : 'active',
@@ -193,6 +210,17 @@ export function DonorDashboard() {
           </div>
         ) : null}
       </section>
+
+      {fundingProgram ? (
+        <FundingModal
+          program={fundingProgram}
+          onClose={() => setFundingProgram(null)}
+          onSuccess={() => {
+            setFundingProgram(null);
+            toast.success('Escrow funded!');
+          }}
+        />
+      ) : null}
     </main>
   );
 }

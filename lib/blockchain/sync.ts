@@ -1,21 +1,43 @@
 ﻿import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/db/schema';
 import { buildMerkleTree } from '@/lib/utils/merkle';
-import { VaccinationRecordContract, GrantEscrow } from '@/lib/blockchain/contracts';
+import {
+  GrantEscrow,
+  MilestoneCheckerContract,
+  VaccinationRecordContract,
+} from '@/lib/blockchain/contracts';
 import { DEMO_VACCINE_LOTS } from '@/lib/seed/demo';
 import { sendSMS } from '@/lib/notifications/sms';
 import { scheduleReminder } from '@/lib/notifications/reminders';
 import type { AuthSession, SyncResult } from '@/types';
 
-export async function runSync(session: AuthSession): Promise<SyncResult> {
+export type SyncProgressUpdate =
+  | 'Gathering pending records...'
+  | 'Running stock reconciliation...'
+  | 'Building Merkle tree...'
+  | 'Submitting batch to XION...'
+  | 'Marking records as synced...'
+  | 'Evaluating milestones...'
+  | 'Releasing grants...'
+  | 'Sending SMS notifications...'
+  | 'Writing audit trail...'
+  | 'Sync complete';
+
+export async function runSync(
+  session: AuthSession,
+  onProgress?: (step: SyncProgressUpdate) => void
+): Promise<SyncResult> {
   const errors: string[] = [];
   let grantsReleased = 0;
   const notifications: string[] = [];
+  const progress = (step: SyncProgressUpdate) => onProgress?.(step);
 
+  progress('Gathering pending records...');
   const pendingVaccinations = await db.vaccinations.where('syncStatus').equals('pending').toArray();
   const pendingPatients = await db.patients.where('syncStatus').equals('pending').toArray();
 
   if (pendingVaccinations.length === 0 && pendingPatients.length === 0) {
+    progress('Sync complete');
     return {
       success: true,
       batchId: 'no-op',
@@ -26,6 +48,7 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     };
   }
 
+  progress('Running stock reconciliation...');
   const flagged: string[] = [];
   for (const record of pendingVaccinations) {
     const lot = DEMO_VACCINE_LOTS.find((item) => item.lotNumber === record.lotNumber);
@@ -37,7 +60,6 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
   }
 
   const validRecords = pendingVaccinations.filter((record) => !flagged.includes(record.id));
-
   if (validRecords.length === 0 && pendingPatients.length === 0) {
     return {
       success: false,
@@ -49,9 +71,11 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     };
   }
 
+  progress('Building Merkle tree...');
   const { root, leaves } = buildMerkleTree(validRecords);
   const batchId = uuidv4();
 
+  progress('Submitting batch to XION...');
   const { txHash } = await VaccinationRecordContract.submitBatch(
     root,
     validRecords.length,
@@ -59,13 +83,13 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     session.userId
   );
 
+  progress('Marking records as synced...');
   for (const record of validRecords) {
     await db.vaccinations.update(record.id, {
       syncStatus: 'synced',
       xionTxHash: txHash,
     });
   }
-
   await db.patients.where('syncStatus').equals('pending').modify({ syncStatus: 'synced' });
 
   await db.syncBatches.put({
@@ -79,6 +103,7 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     recordCount: validRecords.length,
   });
 
+  progress('Evaluating milestones...');
   for (const record of validRecords) {
     const patient = await db.patients.get(record.patientId);
     if (!patient?.programId) continue;
@@ -86,10 +111,11 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     const program = await db.programs.get(patient.programId);
     if (!program || program.status !== 'active') continue;
 
+    await MilestoneCheckerContract.evaluateMilestones(program.id, batchId, session.userId);
+
     const milestone = program.milestones.find(
       (item) => item.vaccineName === record.vaccineName && item.doseNumber === record.doseNumber
     );
-
     if (!milestone) continue;
 
     const alreadyReleased = await db.grantReleases
@@ -97,9 +123,9 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
       .equals(patient.id)
       .filter((grant) => grant.milestoneId === milestone.id)
       .count();
-
     if (alreadyReleased > 0) continue;
 
+    progress('Releasing grants...');
     const { txHash: grantTx } = await GrantEscrow.releaseTranche(
       patient.programId,
       patient.id,
@@ -107,9 +133,8 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
       milestone.grantAmount
     );
 
-    const releaseId = uuidv4();
     await db.grantReleases.put({
-      id: releaseId,
+      id: uuidv4(),
       patientId: patient.id,
       patientName: patient.name,
       milestoneId: milestone.id,
@@ -122,17 +147,14 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
 
     grantsReleased += milestone.grantAmount;
 
-    const updatedMilestones = program.milestones.map((item) =>
-      item.id === milestone.id
-        ? { ...item, completedCount: item.completedCount + 1 }
-        : item
-    );
-
     await db.programs.update(patient.programId, {
-      milestones: updatedMilestones,
+      milestones: program.milestones.map((item) =>
+        item.id === milestone.id ? { ...item, completedCount: item.completedCount + 1 } : item
+      ),
       totalReleased: (program.totalReleased || 0) + milestone.grantAmount,
     });
 
+    progress('Sending SMS notifications...');
     await sendSMS(
       patient.parentPhone,
       `VITE Health: $${milestone.grantAmount} has been added to your account for ${patient.name}'s ${milestone.name} vaccination. Reply REDEEM to transfer to your OPay account.`,
@@ -140,11 +162,8 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     );
 
     const nextMilestone = program.milestones.find(
-      (item) =>
-        item.vaccineName === record.vaccineName &&
-        item.doseNumber === record.doseNumber + 1
+      (item) => item.vaccineName === record.vaccineName && item.doseNumber === record.doseNumber + 1
     );
-
     if (nextMilestone) {
       const dueDate = new Date(record.dateAdministered);
       dueDate.setDate(dueDate.getDate() + 42);
@@ -154,6 +173,7 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     notifications.push(`Grant $${milestone.grantAmount} released to ${patient.name}`);
   }
 
+  progress('Writing audit trail...');
   await db.auditLogs.put({
     id: uuidv4(),
     entityId: batchId,
@@ -174,6 +194,7 @@ export async function runSync(session: AuthSession): Promise<SyncResult> {
     });
   }
 
+  progress('Sync complete');
   return {
     success: true,
     batchId,

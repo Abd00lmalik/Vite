@@ -25,14 +25,19 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
 
   if (step === 'success') {
     return (
-      <PaymentReceipt
-        amount={amount}
-        phone={phone}
-        patientName={patient.name}
-        provider="OPay (Simulated)"
-        transactionId={receiptId}
-        timestamp={new Date().toISOString()}
-      />
+      <div className="space-y-3">
+        <PaymentReceipt
+          amount={amount}
+          phone={phone}
+          patientName={patient.name}
+          provider="OPay (Simulated)"
+          transactionId={receiptId}
+          timestamp={new Date().toISOString()}
+        />
+        <Button className="w-full" variant="outline" onClick={onComplete}>
+          Close
+        </Button>
+      </div>
     );
   }
 
@@ -86,7 +91,6 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
             setReceiptId(transactionId);
             setStep('success');
             toast.success('Transfer confirmed.');
-            onComplete();
           }}
         >
           Confirm Redemption
