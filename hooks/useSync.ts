@@ -1,14 +1,16 @@
-﻿'use client';
+'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/schema';
 import { useSyncStore } from '@/store/syncStore';
 import { useAuthStore } from '@/store/authStore';
 import { runSync } from '@/lib/blockchain/sync';
+import type { SyncProgressUpdate } from '@/lib/blockchain/sync';
 
 export function useSync() {
   const { session } = useAuthStore();
+  const [progressStep, setProgressStep] = useState<SyncProgressUpdate | null>(null);
   const {
     isSyncing,
     lastResult,
@@ -31,8 +33,9 @@ export function useSync() {
     if (!session || isSyncing) return;
 
     setSyncing(true);
+    setProgressStep('Gathering pending records...');
     try {
-      const result = await runSync(session);
+      const result = await runSync(session, setProgressStep);
       setLastResult(result);
       setPending(
         (await db.vaccinations.where('syncStatus').equals('pending').count()) +
@@ -47,9 +50,9 @@ export function useSync() {
       incrementRetry();
     } finally {
       setSyncing(false);
+      setTimeout(() => setProgressStep(null), 1200);
     }
   }, [incrementRetry, isSyncing, resetRetry, session, setLastResult, setPending, setSyncing]);
 
-  return { sync, isSyncing, lastResult, lastSyncTime, pendingCount };
+  return { sync, isSyncing, lastResult, lastSyncTime, pendingCount, progressStep };
 }
-

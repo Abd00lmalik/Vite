@@ -23,8 +23,8 @@ import { useAuthStore } from '@/store/authStore';
 import type { Patient, VaccinationRecord } from '@/types';
 
 const schema = z.object({
-  vaccineName: z.string().min(1),
-  lotNumber: z.string().min(1),
+  vaccineName: z.string().min(1, 'Select a vaccine'),
+  lotNumber: z.string().min(1, 'Enter a lot number'),
   doseNumber: z.coerce.number().min(1).max(5),
   dateAdministered: z.string().refine((value) => new Date(value).getTime() <= Date.now(), {
     message: 'Date cannot be in the future',
@@ -34,7 +34,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const VACCINES = ['DTP', 'OPV', 'Measles', 'BCG', 'YF'];
+const VACCINES = ['DTP', 'OPV', 'Measles', 'BCG', 'Yellow Fever'];
 
 export function VaccinationForm() {
   const { session } = useAuthStore();
@@ -55,36 +55,47 @@ export function VaccinationForm() {
     defaultValues: {
       dateAdministered: new Date().toISOString().slice(0, 10),
       doseNumber: 1,
+      vaccineName: '',
+      lotNumber: '',
+      notes: '',
     },
   });
 
   const selectedVaccine = watch('vaccineName');
+  const selectedLotNumber = watch('lotNumber');
 
   useEffect(() => {
     captureGPS().then((coords) => setGps({ lat: coords.lat, lng: coords.lng }));
   }, []);
 
-  const lots = useMemo(
-    () =>
-      DEMO_VACCINE_LOTS.filter((lot) => lot.vaccineName === selectedVaccine).map((lot) => ({
-        value: lot.lotNumber,
-        label: `${lot.lotNumber} (${lot.dosesRegistered - lot.dosesUsed} left)`,
-      })),
+  const lotsForSelectedVaccine = useMemo(
+    () => DEMO_VACCINE_LOTS.filter((lot) => lot.vaccineName === selectedVaccine),
     [selectedVaccine]
   );
 
+  useEffect(() => {
+    if (!patient || !selectedVaccine) return;
+    const sameVaccine = history.filter((record) => record.vaccineName === selectedVaccine);
+    setValue('doseNumber', sameVaccine.length + 1, { shouldDirty: true });
+  }, [history, patient, selectedVaccine, setValue]);
+
   const onPatientFound = async (found: Patient | null) => {
     setPatient(found);
-    if (!found) return;
+    if (!found) {
+      setHistory([]);
+      return;
+    }
 
     const records = await db.vaccinations.where('patientId').equals(found.id).sortBy('dateAdministered');
     setHistory(records);
-
-    if (selectedVaccine) {
-      const count = records.filter((record) => record.vaccineName === selectedVaccine).length;
-      setValue('doseNumber', count + 1);
-    }
   };
+
+  const selectedLot = DEMO_VACCINE_LOTS.find((lot) => lot.lotNumber === selectedLotNumber);
+  const remainingDoses = selectedLot ? selectedLot.dosesRegistered - selectedLot.dosesUsed : 0;
+  const lotIsUnknown = !!selectedLotNumber && !selectedLot;
+  const lotVaccineMismatch = !!selectedLot && !!selectedVaccine && selectedLot.vaccineName !== selectedVaccine;
+  const lotIsValid = !!selectedLot && !lotVaccineMismatch;
+  const lowStock = lotIsValid && remainingDoses < 10;
 
   const onSubmit = async (values: FormValues) => {
     if (!patient || !session) {
@@ -93,17 +104,21 @@ export function VaccinationForm() {
     }
 
     const matchedLot = DEMO_VACCINE_LOTS.find((lot) => lot.lotNumber === values.lotNumber);
-    if (!matchedLot || matchedLot.vaccineName !== values.vaccineName) {
+    if (!matchedLot) {
+      toast.error('Lot not in registry');
+      return;
+    }
+
+    if (matchedLot.vaccineName !== values.vaccineName) {
       toast.error('Lot number does not match selected vaccine');
       return;
     }
 
     const duplicate = history.find(
-      (record) =>
-        record.vaccineName === values.vaccineName && record.doseNumber === values.doseNumber
+      (record) => record.vaccineName === values.vaccineName && record.doseNumber === values.doseNumber
     );
     if (duplicate) {
-      toast.error('This vaccine dose is already recorded for this patient.');
+      toast.error('This vaccine and dose is already recorded for this patient.');
       return;
     }
 
@@ -114,7 +129,7 @@ export function VaccinationForm() {
 
     const expectedDose = lowerDoses.length > 0 ? lowerDoses[lowerDoses.length - 1] + 1 : 1;
     if (values.doseNumber !== expectedDose) {
-      toast.error('Dose sequence warning: dose appears to skip expected order.');
+      toast('Dose sequence warning: the entered dose skips the expected order.');
     }
 
     const record = await createVaccination({
@@ -146,7 +161,7 @@ export function VaccinationForm() {
         patientId: patient.id,
         raisedBy: 'system',
         reason: 'High daily vaccination volume detected (>50).',
-        evidence: `Worker ${session.userId} recorded ${workerTodayCount} today.`,
+        evidence: `Worker ${session.userId} recorded ${workerTodayCount} doses today.`,
         status: 'open',
         createdAt: new Date().toISOString(),
       });
@@ -162,19 +177,19 @@ export function VaccinationForm() {
     });
 
     toast.success('Vaccination recorded offline. Sync pending.');
+
     const records = await db.vaccinations.where('patientId').equals(patient.id).sortBy('dateAdministered');
     setHistory(records);
+    const sameVaccineCount = records.filter((entry) => entry.vaccineName === values.vaccineName).length;
+
     reset({
-      vaccineName: '',
+      vaccineName: values.vaccineName,
       lotNumber: '',
-      doseNumber: expectedDose + 1,
+      doseNumber: sameVaccineCount + 1,
       dateAdministered: new Date().toISOString().slice(0, 10),
       notes: '',
     });
   };
-
-  const selectedLot = DEMO_VACCINE_LOTS.find((lot) => lot.lotNumber === watch('lotNumber'));
-  const lowStock = selectedLot ? selectedLot.dosesRegistered - selectedLot.dosesUsed < 10 : false;
 
   return (
     <div className="space-y-4 pb-24">
@@ -205,7 +220,10 @@ export function VaccinationForm() {
 
           {!patient ? (
             <p className="text-sm text-gray-600">
-              Patient not found. <Link href="/health-worker/register" className="font-semibold text-teal-dark underline">Register them first \u2192</Link>
+              Patient not found.{' '}
+              <Link href="/health-worker/register" className="font-semibold text-teal-dark underline">
+                Register them first -&gt;
+              </Link>
             </p>
           ) : (
             <div className="rounded-lg bg-teal-50 p-3 text-sm text-teal-dark">
@@ -242,7 +260,7 @@ export function VaccinationForm() {
                   options={VACCINES.map((value) => ({ value, label: value }))}
                   value={watch('vaccineName')}
                   onChange={(event) => {
-                    setValue('vaccineName', event.target.value);
+                    setValue('vaccineName', event.target.value, { shouldValidate: true });
                     setValue('lotNumber', '');
                   }}
                 />
@@ -251,13 +269,32 @@ export function VaccinationForm() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Lot number</label>
-                <Select
-                  options={lots}
-                  value={watch('lotNumber')}
-                  onChange={(event) => setValue('lotNumber', event.target.value)}
-                  placeholder="Select lot"
+                <Input
+                  list="lot-number-options"
+                  {...register('lotNumber')}
+                  placeholder="Type or select lot number"
                 />
-                {lowStock ? <Badge variant="warning">Low stock</Badge> : null}
+                <datalist id="lot-number-options">
+                  {lotsForSelectedVaccine.map((lot) => (
+                    <option key={lot.lotNumber} value={lot.lotNumber}>
+                      {lot.lotNumber}
+                    </option>
+                  ))}
+                </datalist>
+
+                {lotIsValid ? (
+                  <p className="mt-2 text-xs text-green-700">Valid lot - {remainingDoses} doses remaining</p>
+                ) : null}
+                {lowStock ? (
+                  <div className="mt-2">
+                    <Badge variant="warning">Low stock</Badge>
+                  </div>
+                ) : null}
+                {lotIsUnknown ? <p className="mt-2 text-xs text-red-600">Lot not in registry</p> : null}
+                {lotVaccineMismatch ? (
+                  <p className="mt-2 text-xs text-red-600">Lot does not match the selected vaccine</p>
+                ) : null}
+                {errors.lotNumber ? <p className="mt-1 text-sm text-red-600">{errors.lotNumber.message}</p> : null}
               </div>
 
               <div>
@@ -268,6 +305,9 @@ export function VaccinationForm() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Date administered</label>
                 <Input type="date" {...register('dateAdministered')} />
+                {errors.dateAdministered ? (
+                  <p className="mt-1 text-sm text-red-600">{errors.dateAdministered.message}</p>
+                ) : null}
               </div>
 
               <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
@@ -289,6 +329,3 @@ export function VaccinationForm() {
     </div>
   );
 }
-
-
-

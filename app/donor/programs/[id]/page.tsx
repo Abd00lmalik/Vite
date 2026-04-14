@@ -16,6 +16,7 @@ import { Select } from '@/components/ui/select';
 import { sendSMS } from '@/lib/notifications/sms';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { CLINIC_LOCATIONS } from '@/lib/data/clinicLocations';
+import { FundingModal } from '@/components/donor/FundingModal';
 
 export default function ProgramDetailPage() {
   useAuth('donor');
@@ -28,6 +29,7 @@ export default function ProgramDetailPage() {
   const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedState, setSelectedState] = useState('');
   const [selectedLGA, setSelectedLGA] = useState('');
+  const [fundingProgramOpen, setFundingProgramOpen] = useState(false);
 
   const countryData = CLINIC_LOCATIONS.find((country) => country.id === selectedCountry);
   const stateData = countryData?.states.find((state) => state.id === selectedState);
@@ -48,10 +50,21 @@ export default function ProgramDetailPage() {
       <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 md:px-8">
         <Card>
           <CardContent className="p-4">
-            <h1 className="text-2xl font-semibold text-gray-900">{program.name}</h1>
-            <p className="text-sm text-gray-600">
-              Status: {program.status} • Created {new Date(program.createdAt).toLocaleDateString()}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900">{program.name}</h1>
+                <p className="text-sm text-gray-600">
+                  Status: {program.status} • Created {new Date(program.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500">Escrow Balance</p>
+                <p className="text-xl font-bold text-teal-primary">${program.escrowBalance.toLocaleString()}</p>
+                <Button className="mt-2 w-full sm:w-auto" onClick={() => setFundingProgramOpen(true)}>
+                  + Fund Program
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -209,6 +222,17 @@ export default function ProgramDetailPage() {
           </Button>
         </div>
       </Modal>
+
+      {fundingProgramOpen ? (
+        <FundingModal
+          program={program}
+          onClose={() => setFundingProgramOpen(false)}
+          onSuccess={() => {
+            setFundingProgramOpen(false);
+            toast.success('Escrow funded!');
+          }}
+        />
+      ) : null}
     </main>
   );
 }

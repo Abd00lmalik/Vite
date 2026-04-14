@@ -18,13 +18,14 @@ export function PaymentReceipt({
   timestamp,
 }: PaymentReceiptProps) {
   const ngnEquivalent = amount * 1550;
+  const maskedPhone = phone.replace(/(\+\d{3})\d{4,6}(\d{3,4})/, '$1XXXXXX$2');
 
   return (
     <div className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm">
       <h3 className="text-lg font-semibold text-teal-dark">VITE Health Grant Redeemed</h3>
       <div className="mt-4 space-y-2 text-sm text-gray-700">
         <p>Amount: {formatCurrency(amount, 'USD')} ({formatCurrency(ngnEquivalent, 'NGN')} equiv.)</p>
-        <p>To: {phone}</p>
+        <p>To: {maskedPhone}</p>
         <p>Patient: {patientName}</p>
         <p>Provider: {provider}</p>
         <p>Ref: {transactionId}</p>

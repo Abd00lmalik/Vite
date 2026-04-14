@@ -4,6 +4,8 @@ import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { CircleHelp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
@@ -55,6 +57,12 @@ export function PatientDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/how-it-works">
+              <Button variant="outline" className="h-10 px-3">
+                <CircleHelp className="mr-1 h-4 w-4" />
+                Guide
+              </Button>
+            </Link>
             <NotificationBell />
             <Button
               variant="outline"

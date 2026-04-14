@@ -204,7 +204,7 @@ export function ProgramCreateForm() {
                     { value: 'OPV', label: 'OPV' },
                     { value: 'Measles', label: 'Measles' },
                     { value: 'BCG', label: 'BCG' },
-                    { value: 'YF', label: 'YF' },
+                    { value: 'Yellow Fever', label: 'Yellow Fever' },
                   ]}
                 />
                 <Input

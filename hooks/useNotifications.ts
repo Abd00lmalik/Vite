@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/schema';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -33,7 +33,7 @@ export function useNotifications() {
   );
 
   // Sync the live count into Zustand store only when the value changes
-  // Using the primitive unreadCount value (number) as the dependency — safe
+  // Using the primitive unreadCount value (number) as the dependency - safe
   useEffect(() => {
     setUnreadCount(unreadCount ?? 0);
   }, [unreadCount, setUnreadCount]);
@@ -54,3 +54,4 @@ export function useNotifications() {
     markOneRead,
   };
 }
+
