@@ -42,6 +42,8 @@ export function VaccinationForm() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [history, setHistory] = useState<VaccinationRecord[]>([]);
   const [gps, setGps] = useState({ lat: 0, lng: 0 });
+  const [manualLotEntry, setManualLotEntry] = useState('');
+  const [manualLotMode, setManualLotMode] = useState(false);
 
   const {
     register,
@@ -207,12 +209,16 @@ export function VaccinationForm() {
             </Button>
           </div>
 
-          {lookupMode === 'phone' ? (
+                {lookupMode === 'phone' ? (
             <PatientSearch onFound={onPatientFound} />
           ) : (
             <QRScanner
               onScan={async (value) => {
                 const found = await db.patients.where('healthDropId').equals(value).first();
+                await onPatientFound(found ?? null);
+              }}
+              onManualPhoneLookup={async (phone) => {
+                const found = await db.patients.where('parentPhone').equals(phone).first();
                 await onPatientFound(found ?? null);
               }}
             />
@@ -262,6 +268,8 @@ export function VaccinationForm() {
                   onChange={(event) => {
                     setValue('vaccineName', event.target.value, { shouldValidate: true });
                     setValue('lotNumber', '');
+                    setManualLotEntry('');
+                    setManualLotMode(false);
                   }}
                 />
                 {errors.vaccineName ? <p className="mt-1 text-sm text-red-600">{errors.vaccineName.message}</p> : null}
@@ -269,18 +277,42 @@ export function VaccinationForm() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Lot number</label>
-                <Input
-                  list="lot-number-options"
-                  {...register('lotNumber')}
-                  placeholder="Type or select lot number"
+                <Select
+                  value={manualLotMode ? '__manual__' : selectedLotNumber}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (nextValue === '__manual__') {
+                      setManualLotMode(true);
+                      setValue('lotNumber', manualLotEntry, { shouldValidate: true });
+                      return;
+                    }
+
+                    setManualLotMode(false);
+                    setManualLotEntry('');
+                    setValue('lotNumber', nextValue, { shouldValidate: true });
+                  }}
+                  placeholder="Select lot number"
+                  options={[
+                    ...lotsForSelectedVaccine.map((lot) => ({
+                      value: lot.lotNumber,
+                      label: `${lot.lotNumber} (${lot.dosesRegistered - lot.dosesUsed} left)`,
+                    })),
+                    { value: '__manual__', label: 'Enter lot manually' },
+                  ]}
                 />
-                <datalist id="lot-number-options">
-                  {lotsForSelectedVaccine.map((lot) => (
-                    <option key={lot.lotNumber} value={lot.lotNumber}>
-                      {lot.lotNumber}
-                    </option>
-                  ))}
-                </datalist>
+
+                {manualLotMode ? (
+                  <div className="mt-2">
+                    <Input
+                      value={manualLotEntry}
+                      onChange={(event) => {
+                        setManualLotEntry(event.target.value);
+                        setValue('lotNumber', event.target.value, { shouldValidate: true });
+                      }}
+                      placeholder="Manual lot entry"
+                    />
+                  </div>
+                ) : null}
 
                 {lotIsValid ? (
                   <p className="mt-2 text-xs text-green-700">Valid lot - {remainingDoses} doses remaining</p>

@@ -32,6 +32,11 @@ export async function sendSMS(to: string, message: string, type: SMSLog['type'])
   };
 
   await db.smsLogs.put(log);
+
+  // In Phase 2 - replace with:
+  // const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  // await client.messages.create({ body: message, from: process.env.TWILIO_PHONE_NUMBER, to });
+
   // eslint-disable-next-line no-console
   console.log(`[VITE SMS SIMULATED] -> ${to}: ${message}`);
 }

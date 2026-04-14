@@ -28,7 +28,7 @@ const schema = z.object({
   }),
   sex: z.enum(['M', 'F', 'Other']),
   parentName: z.string().min(2),
-  parentPhone: z.string().regex(/^\+234\d{10}$/, 'Use +234 followed by 10 digits'),
+  parentPhone: z.string().regex(/^\+\d{8,15}$/, 'Use international format, e.g. +2348012345678'),
   programId: z.string().optional(),
 });
 
@@ -168,15 +168,27 @@ export function PatientForm() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Sex</label>
-              <Select
-                options={[
+              <div className="grid grid-cols-3 gap-2">
+                {[
                   { value: 'M', label: 'Male' },
                   { value: 'F', label: 'Female' },
                   { value: 'Other', label: 'Other' },
-                ]}
-                value={watch('sex')}
-                onChange={(event) => setValue('sex', event.target.value as FormValues['sex'])}
-              />
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex h-12 cursor-pointer items-center justify-center rounded-lg border border-gray-300 text-sm font-medium text-gray-700 has-[:checked]:border-teal-primary has-[:checked]:bg-teal-50 has-[:checked]:text-teal-dark"
+                  >
+                    <input
+                      type="radio"
+                      value={option.value}
+                      checked={watch('sex') === option.value}
+                      onChange={(event) => setValue('sex', event.target.value as FormValues['sex'])}
+                      className="sr-only"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Parent/guardian full name</label>

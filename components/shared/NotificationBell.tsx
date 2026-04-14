@@ -16,10 +16,10 @@ export function NotificationBell() {
     <div className="relative">
       <button
         onClick={handleOpen}
-        className="relative rounded-full p-2 transition-colors hover:bg-white/10"
+        className="relative rounded-full p-2 transition-colors hover:bg-gray-100"
         aria-label="Notifications"
       >
-        <Bell className="h-5 w-5 text-white" />
+        <Bell className="h-5 w-5 text-gray-700" />
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
             {unreadCount > 9 ? '9+' : unreadCount}

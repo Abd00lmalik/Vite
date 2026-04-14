@@ -26,6 +26,7 @@ import { ReportExporter } from './ReportExporter';
 import { AuditLogTable } from './AuditLogTable';
 import { FundingModal } from './FundingModal';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
+import { shortTxHash } from '@/lib/utils/format';
 import type { Program } from '@/types';
 
 export function DonorDashboard() {
@@ -41,6 +42,7 @@ export function DonorDashboard() {
   const disputes = useLiveQuery(() => db.disputes.toArray(), []);
   const smsLogs = useLiveQuery(() => db.smsLogs.reverse().sortBy('timestamp'), []);
   const auditLogs = useLiveQuery(() => db.auditLogs.reverse().sortBy('timestamp'), []);
+  const syncBatches = useLiveQuery(() => db.syncBatches.reverse().sortBy('submittedAt'), []);
   const patients = useLiveQuery(() => db.patients.toArray(), []);
   const totalEscrow = useLiveQuery(
     () => db.programs.toArray().then((items) => items.reduce((sum, item) => sum + (item.escrowBalance ?? 0), 0)),
@@ -179,6 +181,43 @@ export function DonorDashboard() {
         {tab === 'reports' ? (
           <div className="space-y-4">
             {firstProgram ? <ReportExporter programId={firstProgram.id} /> : null}
+            <Card>
+              <CardHeader>
+                <CardTitle>Sync Log</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-left text-gray-600">
+                      <tr>
+                        <th className="px-3 py-2">Batch</th>
+                        <th className="px-3 py-2">Records</th>
+                        <th className="px-3 py-2">Merkle Root</th>
+                        <th className="px-3 py-2">Tx Hash</th>
+                        <th className="px-3 py-2">Submitted</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(syncBatches ?? []).map((batch) => (
+                        <tr key={batch.id} className="border-t border-gray-200">
+                          <td className="px-3 py-2 font-mono text-xs">{batch.id.slice(0, 8)}</td>
+                          <td className="px-3 py-2">{batch.recordCount}</td>
+                          <td className="px-3 py-2 font-mono text-xs">
+                            {batch.merkleRoot.slice(0, 10)}...{batch.merkleRoot.slice(-8)}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs">
+                            {batch.xionTxHash ? shortTxHash(batch.xionTxHash) : 'N/A'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {batch.submittedAt ? new Date(batch.submittedAt).toLocaleString() : 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
             <AuditLogTable logs={auditLogs ?? []} />
           </div>
         ) : null}
