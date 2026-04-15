@@ -1,11 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { useSync } from '@/hooks/useSync';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import type { SyncResult } from '@/types';
 
 const SYNC_STEPS = [
   'Gathering pending records...',
@@ -20,15 +22,22 @@ const SYNC_STEPS = [
 ] as const;
 
 export function SyncPanel() {
-  const { sync, isSyncing, lastResult, lastSyncTime, pendingCount, progressStep } = useSync();
+  const { sync, isSyncing, lastSyncTime, pendingCount, progressStep } = useSync();
   const isOnline = useOfflineStatus();
   const wasOffline = useRef(false);
+  const syncInProgress = useRef(false);
+  const resultTimeoutRef = useRef<number | null>(null);
+
   const [stepIndex, setStepIndex] = useState<number>(-1);
+  const [result, setResult] = useState<SyncResult | null>(null);
 
-  const syncWithAnimation = useCallback(async () => {
-    if (!isOnline || isSyncing) return;
+  const handleSync = useCallback(async () => {
+    if (!isOnline || isSyncing || syncInProgress.current) return;
 
+    syncInProgress.current = true;
     setStepIndex(0);
+    setResult(null);
+
     let index = 0;
     const timer = window.setInterval(() => {
       index += 1;
@@ -39,11 +48,21 @@ export function SyncPanel() {
     }, 600);
 
     try {
-      await sync();
+      const syncResult = await sync();
+      if (syncResult) {
+        setResult(syncResult);
+        if (resultTimeoutRef.current) {
+          window.clearTimeout(resultTimeoutRef.current);
+        }
+        resultTimeoutRef.current = window.setTimeout(() => {
+          setResult(null);
+        }, 10000);
+      }
     } finally {
       window.clearInterval(timer);
       setStepIndex(SYNC_STEPS.length - 1);
       window.setTimeout(() => setStepIndex(-1), 1800);
+      syncInProgress.current = false;
     }
   }, [isOnline, isSyncing, sync]);
 
@@ -57,8 +76,8 @@ export function SyncPanel() {
 
   useEffect(() => {
     const handleOnline = () => {
-      if (wasOffline.current && pendingCount > 0) {
-        syncWithAnimation();
+      if (wasOffline.current && pendingCount > 0 && !syncInProgress.current) {
+        void handleSync();
       }
       wasOffline.current = false;
     };
@@ -69,11 +88,20 @@ export function SyncPanel() {
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [pendingCount, syncWithAnimation]);
+  }, [handleSync, pendingCount]);
+
+  useEffect(() => {
+    return () => {
+      if (resultTimeoutRef.current) {
+        window.clearTimeout(resultTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -84,13 +112,13 @@ export function SyncPanel() {
         </div>
         <Button
           type="button"
-          onClick={syncWithAnimation}
+          onClick={handleSync}
           loading={isSyncing}
-          disabled={!isOnline || isSyncing}
+          disabled={!isOnline || isSyncing || syncInProgress.current}
           className="w-full sm:w-auto"
         >
           <RefreshCw className={isSyncing ? 'mr-2 h-4 w-4 animate-spin' : 'mr-2 h-4 w-4'} />
-          {isOnline ? (isSyncing ? 'Syncing...' : 'Sync Now') : 'Offline - Sync Disabled'}
+          {isOnline ? (isSyncing ? 'Syncing...' : 'Sync Now') : 'Offline'}
         </Button>
       </div>
 
@@ -124,27 +152,34 @@ export function SyncPanel() {
         </div>
       )}
 
-      {lastResult && (
-        <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-          <p>
-            {lastResult.recordCount} record(s) synced | ${lastResult.grantsReleased} released
-          </p>
-          <p className="font-mono text-xs text-gray-500">
-            Merkle root:{' '}
-            {lastResult.merkleRoot === '0x0'
-              ? '0x0'
-              : `${lastResult.merkleRoot.slice(0, 12)}...${lastResult.merkleRoot.slice(-8)}`}
-          </p>
-          {lastResult.txHash ? (
-            <p className="font-mono text-xs text-gray-500">
-              Tx: {lastResult.txHash.slice(0, 12)}...{lastResult.txHash.slice(-8)}
-            </p>
-          ) : null}
-          {typeof lastResult.flaggedCount === 'number' ? (
-            <p className="text-xs text-amber-700">Flagged records: {lastResult.flaggedCount}</p>
-          ) : null}
-        </div>
-      )}
+      <AnimatePresence>
+        {result ? (
+          <motion.div
+            key="sync-result"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className={`mt-3 rounded-xl border p-3 text-sm ${
+              result.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+            }`}
+          >
+            {result.success ? (
+              <>
+                <p className="font-semibold text-green-700">OK {result.recordCount} records synced</p>
+                <p className="mt-1 font-mono text-xs text-green-600">Root: {result.merkleRoot.slice(0, 12)}...</p>
+                {result.grantsReleased > 0 ? (
+                  <p className="text-xs text-green-600">${result.grantsReleased} in grants released</p>
+                ) : null}
+                {result.flaggedCount && result.flaggedCount > 0 ? (
+                  <p className="text-xs text-amber-600">Warning: {result.flaggedCount} records flagged for review</p>
+                ) : null}
+              </>
+            ) : (
+              <p className="font-semibold text-red-700">Sync failed. Check errors.</p>
+            )}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

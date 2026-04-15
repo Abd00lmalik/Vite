@@ -7,6 +7,7 @@ import { useSyncStore } from '@/store/syncStore';
 import { useAuthStore } from '@/store/authStore';
 import { runSync } from '@/lib/blockchain/sync';
 import type { SyncProgressUpdate } from '@/lib/blockchain/sync';
+import type { SyncResult } from '@/types';
 
 export function useSync() {
   const { session } = useAuthStore();
@@ -29,8 +30,8 @@ export function useSync() {
       return pendingVaccinations + pendingPatients;
     }, []) ?? 0;
 
-  const sync = useCallback(async () => {
-    if (!session || isSyncing) return;
+  const sync = useCallback(async (): Promise<SyncResult | null> => {
+    if (!session || isSyncing) return null;
 
     setSyncing(true);
     setProgressStep('Gathering pending records...');
@@ -46,8 +47,10 @@ export function useSync() {
       } else {
         incrementRetry();
       }
+      return result;
     } catch (_error) {
       incrementRetry();
+      return null;
     } finally {
       setSyncing(false);
       setTimeout(() => setProgressStep(null), 1200);

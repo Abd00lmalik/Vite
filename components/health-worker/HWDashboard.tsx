@@ -56,7 +56,7 @@ export function HWDashboard() {
             <Image src="/logo.png" alt="VITE logo" width={38} height={38} className="rounded-md" />
             <div>
               <p className="text-sm font-semibold text-gray-900">{session.name}</p>
-              <p className="text-xs text-gray-600">Clinic: {session.clinicId ?? 'clinic-001'}</p>
+              <p className="text-xs text-gray-600">Health Worker - Clinic: {session.clinicId ?? 'clinic-001'}</p>
             </div>
           </div>
 
@@ -73,7 +73,7 @@ export function HWDashboard() {
               className="h-10"
               onClick={() => {
                 logout();
-                router.push('/auth/signin');
+                router.push('/');
               }}
             >
               Logout

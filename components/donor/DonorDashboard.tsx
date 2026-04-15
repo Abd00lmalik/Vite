@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { CircleHelp, Plus } from 'lucide-react';
@@ -37,7 +37,7 @@ export function DonorDashboard() {
   const [tab, setTab] = useState('overview');
   const [fundingProgram, setFundingProgram] = useState<Program | null>(null);
 
-  const programs = useLiveQuery(() => db.programs.toArray(), []);
+  const programs = useLiveQuery(() => db.programs.toArray(), []) ?? [];
   const grants = useLiveQuery(() => db.grantReleases.toArray(), []);
   const disputes = useLiveQuery(() => db.disputes.toArray(), []);
   const smsLogs = useLiveQuery(() => db.smsLogs.reverse().sortBy('timestamp'), []);
@@ -68,11 +68,27 @@ export function DonorDashboard() {
     };
   }, [patients, programs, totalEscrow, totalReleased]);
 
+  useEffect(() => {
+    if (!mounted) return;
+    const timer = window.setTimeout(async () => {
+      const count = await db.programs.count();
+      if (count === 0) {
+        console.warn('[VITE] No programs in DB — check seed. Clearing seed guard and reseeding.');
+        localStorage.removeItem('vite_seeded_v2');
+        window.location.reload();
+      }
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [mounted]);
+
   if (!mounted || !session) {
     return <PageSkeleton />;
   }
 
-  const firstProgram = programs?.[0];
+  const firstProgram = programs[0];
 
   return (
     <main className="min-h-screen bg-gray-50 pb-24">
@@ -99,7 +115,7 @@ export function DonorDashboard() {
               className="h-10"
               onClick={() => {
                 logout();
-                router.push('/auth/signin');
+                router.push('/');
               }}
             >
               Logout
@@ -131,6 +147,43 @@ export function DonorDashboard() {
 
         {tab === 'overview' ? (
           <div className="space-y-4">
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-800">Active Programs</h2>
+                <Link href="/donor/programs/new" className="text-sm font-medium text-teal-primary hover:underline">
+                  + Create New Program
+                </Link>
+              </div>
+
+              {programs.length === 0 ? (
+                <div className="rounded-xl bg-gray-50 p-8 text-center">
+                  <p className="mb-4 text-gray-500">No programs yet.</p>
+                  <Link
+                    href="/donor/programs/new"
+                    className="rounded-lg bg-teal-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-teal-dark"
+                  >
+                    Create Your First Program
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {programs.map((program) => (
+                    <ProgramCard
+                      key={program.id}
+                      program={program}
+                      enrolledPatients={(patients ?? []).filter((patient) => patient.programId === program.id).length}
+                      onFund={() => setFundingProgram(program)}
+                      onToggleStatus={async (item) => {
+                        await db.programs.update(item.id, {
+                          status: item.status === 'active' ? 'paused' : 'active',
+                        });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
             <Card>
               <CardHeader>
                 <CardTitle>Milestone Progress</CardTitle>
@@ -158,12 +211,12 @@ export function DonorDashboard() {
               </Button>
             </Link>
 
-            {(programs ?? []).map((program) => (
+            {programs.map((program) => (
               <ProgramCard
                 key={program.id}
                 program={program}
                 enrolledPatients={(patients ?? []).filter((patient) => patient.programId === program.id).length}
-                onFund={setFundingProgram}
+                onFund={() => setFundingProgram(program)}
                 onToggleStatus={async (item) => {
                   await db.programs.update(item.id, {
                     status: item.status === 'active' ? 'paused' : 'active',

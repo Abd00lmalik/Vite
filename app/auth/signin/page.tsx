@@ -62,6 +62,24 @@ export default function SignInPage() {
                 Create account
               </Link>
             </p>
+
+            <div className="mt-6 rounded-xl border border-teal-primary/20 bg-teal-pale p-4">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-teal-dark">Demo Credentials</p>
+              <div className="space-y-1.5 text-xs text-teal-dark">
+                <div className="flex justify-between gap-2">
+                  <span className="font-medium">Health Worker:</span>
+                  <span className="font-mono text-right">amara@clinic-kano.ng / Demo1234!</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="font-medium">Donor / NGO:</span>
+                  <span className="font-mono text-right">donor@unicef-ng.org / Demo1234!</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="font-medium">Patient:</span>
+                  <span className="font-mono text-right">+2348012345001 (phone only)</span>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

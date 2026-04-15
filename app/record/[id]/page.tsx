@@ -17,7 +17,8 @@ import type { Patient, VaccinationRecord } from '@/types';
 export default function PublicRecordPage() {
   const params = useParams();
   const router = useRouter();
-  const id = (params.id as string).toUpperCase();
+  const idParam = typeof params.id === 'string' ? params.id : '';
+  const id = idParam.toUpperCase();
 
   const [mounted, setMounted] = useState(false);
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -83,19 +84,37 @@ export default function PublicRecordPage() {
 
       <section className="mx-auto max-w-5xl space-y-4 px-4 py-4 md:px-8">
         {!patient ? (
-          <Card>
-            <CardContent className="space-y-3 p-4">
-              <p className="text-base text-gray-700">No record found for ID {id}</p>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter health ID"
-                  value={manualId}
-                  onChange={(event) => setManualId(event.target.value.toUpperCase())}
-                />
-                <Button onClick={() => router.push(`/record/${manualId}`)}>Search</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex min-h-[65vh] items-center justify-center p-6">
+            <div className="w-full max-w-sm text-center">
+              <div className="mb-4 text-5xl">?</div>
+              <h2 className="mb-2 text-xl font-bold text-gray-800">Record Not Found</h2>
+              <p className="mb-6 text-sm text-gray-500">No vaccination record found for ID: {id || 'Unknown'}</p>
+              <Input
+                placeholder="Enter Health ID (e.g. HD-ADE001)"
+                value={manualId}
+                onChange={(event) => setManualId(event.target.value.toUpperCase())}
+                className="mb-3 text-center font-mono"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    const value = (event.target as HTMLInputElement).value.trim().toUpperCase();
+                    if (value) {
+                      router.push(`/record/${value}`);
+                    }
+                  }
+                }}
+              />
+              <Button
+                className="w-full"
+                onClick={() => {
+                  const value = manualId.trim().toUpperCase();
+                  if (value) router.push(`/record/${value}`);
+                }}
+              >
+                Search
+              </Button>
+              <p className="mt-2 text-xs text-gray-400">Press Enter to search</p>
+            </div>
+          </div>
         ) : (
           <>
             <Card className="border-teal-100 bg-teal-50">

@@ -97,10 +97,7 @@ export function PatientSignupForm() {
     setCreatedPatient(patient);
     login(buildSession(result.user));
     toast.success(`Account created. Health ID: ${patient.healthDropId}`);
-
-    setTimeout(() => {
-      router.push('/patient');
-    }, 1800);
+    router.push('/patient');
   };
 
   if (createdPatient) {
