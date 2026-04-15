@@ -68,6 +68,12 @@ export function PatientForm() {
       return;
     }
 
+    const existingPatient = await db.patients.where('parentPhone').equals(values.parentPhone).first();
+    if (existingPatient) {
+      toast.error('This phone number is already registered. Search for the patient instead.');
+      return;
+    }
+
     const gps = await captureGPS();
 
     let patientUser = await db.users.where('phone').equals(values.parentPhone).first();
@@ -80,20 +86,30 @@ export function PatientForm() {
       patientUser = result.user ?? undefined;
     }
 
-    const patient = await createPatient({
-      userId: patientUser?.id,
-      name: values.childName,
-      dateOfBirth: values.dateOfBirth,
-      sex: values.sex,
-      parentName: values.parentName,
-      parentPhone: values.parentPhone,
-      clinicId: session.clinicId ?? 'clinic-001',
-      clinicName: session.clinicId === 'clinic-002' ? 'Ibadan Community Clinic' : 'Kano Primary Health Post',
-      registeredBy: session.userId,
-      programId: values.programId || undefined,
-      gpsLat: gps.lat,
-      gpsLng: gps.lng,
-    });
+    let patient;
+    try {
+      patient = await createPatient({
+        userId: patientUser?.id,
+        name: values.childName,
+        dateOfBirth: values.dateOfBirth,
+        sex: values.sex,
+        parentName: values.parentName,
+        parentPhone: values.parentPhone,
+        clinicId: session.clinicId ?? 'clinic-001',
+        clinicName: session.clinicId === 'clinic-002' ? 'Ibadan Community Clinic' : 'Kano Primary Health Post',
+        registeredBy: session.userId,
+        programId: values.programId || undefined,
+        gpsLat: gps.lat,
+        gpsLng: gps.lng,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Patient already registered')) {
+        toast.error('This phone number is already registered. Search for the patient instead.');
+        return;
+      }
+      toast.error('Unable to register patient. Please try again.');
+      return;
+    }
 
     const amount = selectedProgram?.milestones?.[0]?.grantAmount ?? 0;
 

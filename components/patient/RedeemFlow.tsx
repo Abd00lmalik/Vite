@@ -35,7 +35,8 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
   const [progressIndex, setProgressIndex] = useState(0);
 
   const available = useMemo(() => grants.filter((grant) => grant.status === 'released'), [grants]);
-  const amount = useMemo(() => available.reduce((sum, grant) => sum + grant.amount, 0), [available]);
+  const availableTotal = useMemo(() => available.reduce((sum, grant) => sum + grant.amount, 0), [available]);
+  const amount = availableTotal;
 
   useEffect(() => {
     if (step !== 'processing') return;
@@ -53,6 +54,8 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
 
     return () => window.clearInterval(timer);
   }, [step]);
+
+  if (availableTotal <= 0) return null;
 
   if (step === 'success') {
     return (
@@ -79,7 +82,7 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
           {PROCESSING_STEPS.map((label, index) => (
             <div key={label} className="flex items-center gap-2">
               {index <= progressIndex ? (
-                <span className="text-green-600">✓</span>
+                <span className="text-green-600">OK</span>
               ) : (
                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-teal-primary" />
               )}

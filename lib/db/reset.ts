@@ -13,7 +13,7 @@
         req.onblocked = () => resolve();
       });
     } catch (error) {
-      console.warn('[VITE] DB wipe failed — proceeding anyway:', error);
+      console.warn('[VITE] DB wipe warning:', error);
     }
 
     Object.keys(localStorage)

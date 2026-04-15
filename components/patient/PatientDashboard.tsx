@@ -72,7 +72,7 @@ export function PatientDashboard() {
               className="h-10"
               onClick={() => {
                 logout();
-                router.push('/auth/signin');
+                router.push('/');
               }}
             >
               Logout

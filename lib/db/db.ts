@@ -31,6 +31,11 @@ export async function createClinic(clinic: Clinic): Promise<void> {
 export async function createPatient(
   data: Omit<Patient, 'id' | 'healthDropId' | 'syncStatus' | 'registeredAt'>
 ): Promise<Patient> {
+  const existing = await db.patients.where('parentPhone').equals(data.parentPhone).first();
+  if (existing) {
+    throw new Error(`Patient already registered with phone ${data.parentPhone}`);
+  }
+
   const id = uuidv4();
   const patient: Patient = {
     ...data,

@@ -38,7 +38,7 @@ export default function DonorProgramsPage() {
             key={program.id}
             program={program}
             enrolledPatients={(patients ?? []).filter((patient) => patient.programId === program.id).length}
-            onFund={setFundingProgram}
+            onFund={() => setFundingProgram(program)}
             onToggleStatus={async (item) => {
               await db.programs.update(item.id, {
                 status: item.status === 'active' ? 'paused' : 'active',
