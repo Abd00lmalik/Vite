@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { CircleHelp } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { useAuthStore } from '@/store/authStore';
@@ -53,13 +54,50 @@ export function DonorDashboard() {
   const [tab, setTab]                   = useState('overview');
   const [fundingProgram, setFundingProgram] = useState<Program | null>(null);
 
-  const programs    = useLiveQuery(() => db.programs.toArray(), []) ?? [];
-  const grants      = useLiveQuery(() => db.grantReleases.toArray(), []);
-  const disputes    = useLiveQuery(() => db.disputes.toArray(), []);
-  const smsLogs     = useLiveQuery(() => db.smsLogs.reverse().sortBy('timestamp'), []);
-  const auditLogs   = useLiveQuery(() => db.auditLogs.reverse().sortBy('timestamp'), []);
-  const syncBatches = useLiveQuery(() => db.syncBatches.reverse().sortBy('submittedAt'), []);
-  const patients    = useLiveQuery(() => db.patients.toArray(), []);
+  const programs = useLiveQuery<Program[]>(
+    () =>
+      session
+        ? db.programs.where('donorId').equals(session.userId).toArray()
+        : Promise.resolve<Program[]>([]),
+    [session?.userId]
+  ) ?? [];
+
+  const patients = useLiveQuery(async () => {
+    const programIds = programs.map((program) => program.id);
+    if (!programIds.length) return [];
+    return db.patients.where('programId').anyOf(programIds).toArray();
+  }, [programs.map((program) => program.id).join('|')]);
+
+  const grants = useLiveQuery(async () => {
+    const patientIds = (patients ?? []).map((patient) => patient.id);
+    if (!patientIds.length) return [];
+    return db.grantReleases.where('patientId').anyOf(patientIds).toArray();
+  }, [patients?.map((patient) => patient.id).join('|')]);
+
+  const disputes = useLiveQuery(async () => {
+    const patientIds = (patients ?? []).map((patient) => patient.id);
+    if (!patientIds.length) return [];
+    return db.disputes.where('patientId').anyOf(patientIds).toArray();
+  }, [patients?.map((patient) => patient.id).join('|')]);
+
+  const smsLogs = useLiveQuery(async () => {
+    const phones = Array.from(new Set((patients ?? []).map((patient) => patient.parentPhone)));
+    if (!phones.length) return [];
+    return db.smsLogs.where('to').anyOf(phones).reverse().sortBy('timestamp');
+  }, [patients?.map((patient) => patient.parentPhone).join('|')]);
+
+  const auditLogs = useLiveQuery(async () => {
+    if (!session) return [];
+    return db.auditLogs.where('performedBy').equals(session.userId).reverse().sortBy('timestamp');
+  }, [session?.userId]);
+
+  const syncBatches = useLiveQuery(async () => {
+    if (!programs.length) return [];
+    const clinicIds = Array.from(new Set((patients ?? []).map((patient) => patient.clinicId)));
+    const all = await db.syncBatches.reverse().sortBy('submittedAt');
+    if (!clinicIds.length) return [];
+    return all.filter((batch) => batch.records.some((record) => clinicIds.includes(record.clinicId)));
+  }, [programs.length, patients?.map((patient) => patient.clinicId).join('|')]);
   
   const totalEscrow = useMemo(() => programs.reduce((sum, p) => sum + (p.escrowBalance ?? 0), 0), [programs]);
   const totalReleased = useMemo(() => programs.reduce((sum, p) => sum + (p.totalReleased ?? 0), 0), [programs]);
@@ -83,11 +121,11 @@ export function DonorDashboard() {
     };
     
     syncBalances();
-  }, [isConnected, queryClient, programs.length]);
+  }, [isConnected, programs, queryClient]);
 
   const metrics = useMemo(() => ({
     enrolled:          patients?.length ?? 0,
-    milestonesComplete: (programs ?? []).reduce(
+    milestonesComplete: programs.reduce(
       (sum, p) => sum + p.milestones.reduce((a, m) => a + m.completedCount, 0), 0
     ),
     fundsReleased:  totalReleased,
@@ -116,6 +154,10 @@ export function DonorDashboard() {
             </div>
 
             <div className="flex items-center gap-3">
+              <Link href="/how-it-works" className="hidden sm:inline-flex items-center gap-1 text-white/80 hover:text-white transition-colors text-sm font-medium">
+                <CircleHelp className="h-4 w-4" />
+                Guide
+              </Link>
               <XionConnectButton compact />
               <NotificationBell />
               <button
@@ -256,7 +298,7 @@ export function DonorDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-ui-border">
-                      {(syncBatches ?? []).map((batch) => (
+                  {(syncBatches ?? []).map((batch) => (
                         <tr key={batch.id} className="hover:bg-ui-bg/50 transition-colors">
                           <td className="px-6 py-4 font-medium text-who-blue">{batch.id.slice(0, 8)}</td>
                           <td className="px-6 py-4">{batch.recordCount}</td>
@@ -328,7 +370,7 @@ export function DonorDashboard() {
           program={fundingProgram}
           onClose={() => setFundingProgram(null)}
           onSuccess={() => {
-            setFundingProgram(null);
+            toast.success('Escrow funded successfully!');
           }}
         />
       )}

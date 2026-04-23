@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/image';
 import NextLink from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
@@ -55,6 +54,7 @@ export function StaffLoginForm({ role }: StaffLoginFormProps) {
 
     if (session.role !== role) {
       toast.error(`This account is registered as ${session.role}.`);
+      login(session);
       router.push(homeByRole[session.role]);
       return;
     }

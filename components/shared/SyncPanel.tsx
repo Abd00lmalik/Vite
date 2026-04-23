@@ -1,164 +1,212 @@
 'use client';
-import { useXion } from '@/hooks/useXion';
+
+import { useEffect, useRef, useState } from 'react';
+import { ExternalLink, Link2 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import toast from 'react-hot-toast';
+import { db } from '@/lib/db/schema';
 import { runSync } from '@/lib/blockchain/sync';
+import { useXion } from '@/hooks/useXion';
+import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useAuthStore } from '@/store/authStore';
 import { useSyncStore } from '@/store/syncStore';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/db/schema';
-import { useState, useRef } from 'react';
-import { ExternalLink } from 'lucide-react';
-import toast from 'react-hot-toast';
 
 const STEPS = [
   'Gathering pending records',
   'Running stock reconciliation',
   'Building Merkle tree',
-  'Submitting to XION testnet-2',
-  'Checking milestones',
-  'Releasing grants on-chain',
-  'Sending SMS notifications',
-  'Sync complete',
+  'Submitting batch',
+  'Finalizing sync',
 ];
 
 export function SyncPanel() {
-  const { session }                          = useAuthStore();
+  const { session } = useAuthStore();
   const { address, signingClient, isConnected } = useXion();
   const { isSyncing, setSyncing, setLastResult } = useSyncStore();
-  const [step, setStep]                      = useState(-1);
-  const [result, setResult]                  = useState<any>(null);
-  const [isOnline, setIsOnline]              = useState(true);
-  const syncRef                              = useRef(false);
 
-  const pendingCount = useLiveQuery(
-    () => db.vaccinations.where('syncStatus').equals('pending').count(),
-    []
-  ) ?? 0;
+  const [step, setStep] = useState(-1);
+  const [result, setResult] = useState<any>(null);
+  const isOnline = useOfflineStatus();
+  const syncRef = useRef(false);
+
+  const clinicId = session?.clinicId ?? (session ? `clinic-${session.userId.slice(0, 6)}` : 'clinic-unknown');
+
+  const pendingCount = useLiveQuery(async () => {
+    if (!session) return 0;
+
+    const pendingVaccinations = await db.vaccinations
+      .where('clinicId')
+      .equals(clinicId)
+      .filter((record) => record.syncStatus === 'pending')
+      .count();
+
+    const pendingPatients = await db.patients
+      .where('clinicId')
+      .equals(clinicId)
+      .filter((patient) => patient.syncStatus === 'pending')
+      .count();
+
+    return pendingVaccinations + pendingPatients;
+  }, [clinicId, session?.userId]) ?? 0;
 
   async function handleSync() {
-    if (isSyncing || syncRef.current || !isOnline) return;
-    if (!isConnected || !signingClient || !address) {
-      toast.error('Connect your XION account to sync');
-      return;
-    }
+    if (!session || isSyncing || syncRef.current || !isOnline || pendingCount === 0) return;
 
     syncRef.current = true;
     setSyncing(true);
     setResult(null);
 
-    for (let i = 0; i < STEPS.length - 1; i++) {
+    for (let i = 0; i < STEPS.length; i++) {
       setStep(i);
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise((resolve) => setTimeout(resolve, 450));
     }
 
     try {
-      const res = await runSync(
-        { userId: session?.userId ?? '', role: session?.role ?? '',
-          clinicId: session?.clinicId },
+      const response = await runSync(
+        {
+          userId: session.userId,
+          role: session.role,
+          clinicId: session.clinicId,
+        },
         signingClient,
-        address
+        address ?? ''
       );
-      setResult(res);
-      setLastResult(res);
-      setStep(STEPS.length - 1);
-      if (res.success) {
-        toast.success(`${res.recordCount} records synced on XION`);
+
+      setResult(response);
+      setLastResult(response);
+
+      if (!isConnected) {
+        toast.success(`Sync completed in simulated mode (${response.recordCount} records).`);
+      } else if (response.success) {
+        toast.success(`${response.recordCount} records synced on XION.`);
       } else {
-        toast.error('Sync failed: check errors below');
+        toast.error('Sync failed. Review error details.');
       }
-    } catch (err: any) {
-      toast.error(err.message ?? 'Sync failed');
+    } catch (error: any) {
+      toast.error(error?.message ?? 'Sync failed');
     } finally {
       setSyncing(false);
       syncRef.current = false;
-      setTimeout(() => { setStep(-1); }, 15000);
+      setTimeout(() => setStep(-1), 10000);
     }
   }
 
+  useEffect(() => {
+    if (!isOnline || pendingCount === 0 || isSyncing) return;
+
+    const timer = setTimeout(() => {
+      void handleSync();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [isOnline, isSyncing, pendingCount, session?.userId]);
+
   return (
-    <div className="bg-white border border-ui-border rounded-lg p-4 mb-4">
-      <div className="flex items-center justify-between mb-3">
+    <div className="mb-4 rounded-lg border border-ui-border bg-white p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${
-            isOnline ? 'bg-who-green' : 'bg-gray-400'
-          }`} />
-          <span className="text-sm font-medium text-ui-text">
-            {isOnline ? 'Online' : 'Offline Mode'}
-          </span>
-          {pendingCount > 0 && (
-            <span className="badge-orange">{pendingCount} pending</span>
-          )}
+          <div className={`h-2 w-2 rounded-full ${isOnline ? 'bg-who-green' : 'bg-gray-400'}`} />
+          <span className="text-sm font-medium text-ui-text">{isOnline ? 'Online' : 'Offline Mode'}</span>
+          {pendingCount > 0 && <span className="badge-orange">{pendingCount} pending</span>}
         </div>
+
         <button
-          onClick={handleSync}
-          disabled={isSyncing || !isOnline || pendingCount === 0 || !isConnected}
-          className="btn-primary text-sm py-2 px-4"
+          onClick={() => void handleSync()}
+          disabled={isSyncing || !isOnline || pendingCount === 0}
+          className="btn-primary px-4 py-2 text-sm"
         >
           {isSyncing ? 'Syncing...' : 'Sync to XION'}
         </button>
       </div>
 
       {!isConnected && (
-        <p className="text-xs text-who-orange bg-who-orange-light border
-                      border-who-orange/20 rounded p-2">
-          Connect your XION account to sync records on-chain.
+        <p className="rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
+          Wallet not connected. Sync will run in simulated mode and still preserve your clinic workflow.
         </p>
       )}
 
-      {/* Progress steps */}
       {step >= 0 && (
         <div className="mt-3 space-y-1">
-          {STEPS.map((label, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs py-1">
-              <span className={`flex-shrink-0 ${
-                i < step  ? 'text-who-green' :
-                i === step ? 'text-who-blue' :
-                'text-gray-300'
-              }`}>
-                {i < step ? '✓' : i === step ? '●' : '○'}
+          {STEPS.map((label, index) => (
+            <div key={label} className="flex items-center gap-2 py-1 text-xs">
+              <span
+                className={`flex-shrink-0 ${
+                  index < step
+                    ? 'text-who-green'
+                    : index === step
+                    ? 'text-who-blue'
+                    : 'text-gray-300'
+                }`}
+              >
+                {index < step ? 'OK' : index === step ? '...' : 'o'}
               </span>
-              <span className={
-                i < step  ? 'text-who-green' :
-                i === step ? 'text-ui-text' :
-                'text-gray-400'
-              }>{label}</span>
+              <span
+                className={
+                  index < step
+                    ? 'text-who-green'
+                    : index === step
+                    ? 'text-ui-text'
+                    : 'text-gray-400'
+                }
+              >
+                {label}
+              </span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Result card */}
-      {result?.success && result.txHash && (
-        <div className="mt-3 p-3 bg-who-green-light border border-who-green/30
-                        rounded-lg text-xs space-y-1.5">
-          <p className="font-semibold text-who-green">
-            ✓ {result.recordCount} records confirmed on XION testnet-2
-          </p>
-          <p className="text-ui-text-muted">
-            Root: {result.merkleRoot.slice(0,12)}...{result.merkleRoot.slice(-8)}
-          </p>
-          {result.grantsReleased > 0 && (
-            <p className="text-who-blue font-medium">
-              ${result.grantsReleased} in grants released
-            </p>
+      {result && (
+        <div
+          className={`mt-3 space-y-1.5 rounded-lg border p-3 text-xs ${
+            result.success
+              ? 'border-who-green/30 bg-who-green-light'
+              : 'border-who-red/30 bg-who-red-light'
+          }`}
+        >
+          {result.success ? (
+            <>
+              <p className="font-semibold text-who-green">
+                {result.recordCount} records confirmed ({result.mode === 'onchain' ? 'on-chain' : 'simulated'})
+              </p>
+              <p className="text-ui-text-muted">
+                Root: {result.merkleRoot.slice(0, 12)}...{result.merkleRoot.slice(-8)}
+              </p>
+              {result.grantsReleased > 0 && (
+                <p className="font-medium text-who-blue">${result.grantsReleased} in grants released</p>
+              )}
+              {result.flaggedCount > 0 && (
+                <p className="text-who-orange">{result.flaggedCount} records flagged for review</p>
+              )}
+              {result.mode === 'onchain' ? (
+                <a
+                  href={result.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-who-blue hover:underline"
+                >
+                  View on XION Explorer
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                <p className="inline-flex items-center gap-1 text-ui-text-muted">
+                  <Link2 className="h-3 w-3" />
+                  Simulated sync complete. Connect wallet for on-chain tx hashes.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="font-semibold text-who-red">Sync failed</p>
+              {(result.errors ?? []).slice(0, 3).map((error: string) => (
+                <p key={error} className="text-who-red">
+                  - {error}
+                </p>
+              ))}
+            </>
           )}
-          {result.flaggedCount > 0 && (
-            <p className="text-who-orange">
-              ⚠ {result.flaggedCount} records flagged for review
-            </p>
-          )}
-          <a
-            href={result.explorerUrl}
-            target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-who-blue hover:underline"
-          >
-            View on XION Explorer
-            <ExternalLink className="h-3 w-3" />
-          </a>
         </div>
       )}
     </div>
   );
 }
-
-
-

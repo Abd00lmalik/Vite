@@ -17,6 +17,7 @@ import { createVaccination } from '@/lib/db/db';
 import { db } from '@/lib/db/schema';
 import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
 import { useAuthStore } from '@/store/authStore';
+import { isDemoSession } from '@/lib/auth/demo';
 import type { Patient, VaccinationRecord } from '@/types';
 
 const schema = z.object({
@@ -35,6 +36,7 @@ const VACCINES = ['DTP', 'OPV', 'Measles', 'BCG', 'Yellow Fever'];
 
 export function VaccinationForm() {
   const { session } = useAuthStore();
+  const demoSession = isDemoSession(session);
   const [lookupMode, setLookupMode] = useState<'phone' | 'qr'>('phone');
   const [patient, setPatient] = useState<Patient | null>(null);
   const [history, setHistory] = useState<VaccinationRecord[]>([]);
@@ -79,11 +81,20 @@ export function VaccinationForm() {
   }, [history, patient, selectedVaccine, setValue]);
 
   const onPatientFound = async (found: Patient | null) => {
-    setPatient(found);
     if (!found) {
+      setPatient(null);
       setHistory([]);
       return;
     }
+
+    if (!demoSession && session?.clinicId && found.clinicId !== session.clinicId) {
+      toast.error('This patient belongs to another clinic. Search your clinic records only.');
+      setPatient(null);
+      setHistory([]);
+      return;
+    }
+
+    setPatient(found);
 
     const records = await db.vaccinations.where('patientId').equals(found.id).sortBy('dateAdministered');
     setHistory(records);
@@ -101,6 +112,9 @@ export function VaccinationForm() {
       toast.error('Find a patient first');
       return;
     }
+
+    const clinicId = session.clinicId ?? `clinic-${session.userId.slice(0, 6)}`;
+    const clinic = await db.clinics.get(clinicId);
 
     const matchedLot = INITIAL_VACCINE_LOTS.find((lot) => lot.lotNumber === values.lotNumber);
     const recordId = uuidv4();
@@ -141,8 +155,8 @@ export function VaccinationForm() {
       doseNumber: values.doseNumber,
       dateAdministered: values.dateAdministered,
       administeredBy: session.userId,
-      clinicId: session.clinicId ?? 'clinic-001',
-      clinicName: session.clinicId === 'clinic-002' ? 'Ibadan Community Clinic' : 'Kano Primary Health Post',
+      clinicId,
+      clinicName: clinic?.name ?? 'Unassigned Clinic',
       gpsLat: gps.lat,
       gpsLng: gps.lng,
       notes: values.notes,
@@ -232,7 +246,11 @@ export function VaccinationForm() {
           </div>
 
           {lookupMode === 'phone' ? (
-            <PatientSearch onFound={onPatientFound} />
+            <PatientSearch
+              onFound={onPatientFound}
+              clinicId={session?.clinicId}
+              allowCrossClinic={demoSession}
+            />
           ) : (
             <QRScanner
               onScan={async (value) => {

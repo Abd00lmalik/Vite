@@ -34,14 +34,11 @@ export function useSync() {
 
   const sync = useCallback(async (): Promise<SyncResult | null> => {
     if (!session || isSyncing) return null;
-    if (!signingClient || !senderAddress) {
-      return null;
-    }
 
     setSyncing(true);
     setProgressStep({ step: 1, message: 'Gathering pending records...' });
     try {
-      const result = await runSync(session, signingClient, senderAddress, setProgressStep);
+      const result = await runSync(session, signingClient, senderAddress ?? '', setProgressStep);
       setLastResult(result);
       setPending(
         (await db.vaccinations.where('syncStatus').equals('pending').count()) +

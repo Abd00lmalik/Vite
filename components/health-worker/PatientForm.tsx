@@ -50,7 +50,7 @@ export function PatientForm() {
     defaultValues: {
       sex: 'M',
       parentPhone: '+234',
-      programId: 'program-init-001',
+      programId: '',
     },
   });
 
@@ -72,6 +72,8 @@ export function PatientForm() {
     }
 
     const gps = await captureGPS();
+    const clinicId = session.clinicId ?? `clinic-${session.userId.slice(0, 6)}`;
+    const clinicRecord = await db.clinics.get(clinicId);
 
     let patientUser = await db.users.where('phone').equals(values.parentPhone).first();
     if (!patientUser) {
@@ -92,8 +94,8 @@ export function PatientForm() {
         sex: values.sex,
         parentName: values.parentName,
         parentPhone: values.parentPhone,
-        clinicId: session.clinicId ?? 'clinic-001',
-        clinicName: session.clinicId === 'clinic-002' ? 'Ibadan Community Clinic' : 'Kano Primary Health Post',
+        clinicId,
+        clinicName: clinicRecord?.name ?? 'Unassigned Clinic',
         registeredBy: session.userId,
         programId: values.programId || undefined,
         gpsLat: gps.lat,

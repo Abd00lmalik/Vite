@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/db/schema';
 import type { AuthSession, User, UserRole } from '@/types';
+import { isDemoUser } from './demo';
 
 export async function registerUser(data: {
   role: UserRole;
@@ -16,13 +17,16 @@ export async function registerUser(data: {
   roleTitle?: string;
   programPreferences?: string[];
 }): Promise<{ user: User | null; error?: string }> {
-  if (data.email) {
-    const existing = await db.users.where('email').equals(data.email).first();
+  const email = data.email?.trim().toLowerCase();
+  const phone = data.phone?.trim();
+
+  if (email) {
+    const existing = await db.users.where('email').equals(email).first();
     if (existing) return { user: null, error: 'Email already registered' };
   }
 
-  if (data.phone) {
-    const existing = await db.users.where('phone').equals(data.phone).first();
+  if (phone) {
+    const existing = await db.users.where('phone').equals(phone).first();
     if (existing) return { user: null, error: 'Phone already registered' };
   }
 
@@ -33,8 +37,8 @@ export async function registerUser(data: {
     id: uuidv4(),
     role: data.role,
     name: data.name,
-    email: data.email,
-    phone: data.phone,
+    email,
+    phone,
     passwordHash,
     clinicId: data.clinicId,
     clinicName: data.clinicName,
@@ -51,7 +55,7 @@ export async function registerUser(data: {
 }
 
 export async function loginWithPhone(phone: string): Promise<AuthSession | null> {
-  const user = await db.users.where('phone').equals(phone).first();
+  const user = await db.users.where('phone').equals(phone.trim()).first();
   if (!user || user.role !== 'patient') {
     return null;
   }
@@ -61,7 +65,7 @@ export async function loginWithPhone(phone: string): Promise<AuthSession | null>
 }
 
 export async function loginWithEmail(email: string, password: string): Promise<AuthSession | null> {
-  const user = await db.users.where('email').equals(email).first();
+  const user = await db.users.where('email').equals(email.trim().toLowerCase()).first();
   if (!user || !user.passwordHash) {
     return null;
   }
@@ -79,9 +83,10 @@ export function buildSession(user: User): AuthSession {
   return {
     userId: user.id,
     role: user.role,
-    name: user.name,
+    name: user.organizationName ?? user.name,
     clinicId: user.clinicId,
     organizationName: user.organizationName,
+    ...(isDemoUser(user) ? { demo: true } : {}),
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   };
 }

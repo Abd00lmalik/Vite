@@ -14,12 +14,22 @@ import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import type { Program } from '@/types';
 
 export default function DonorProgramsPage() {
-  useAuth('donor');
+  const { session } = useAuth('donor');
   const mounted = useMounted();
   const [fundingProgram, setFundingProgram] = useState<Program | null>(null);
 
-  const programs = useLiveQuery(() => db.programs.toArray(), []);
-  const patients = useLiveQuery(() => db.patients.toArray(), []);
+  const programs = useLiveQuery<Program[]>(
+    () =>
+      session
+        ? db.programs.where('donorId').equals(session.userId).toArray()
+        : Promise.resolve<Program[]>([]),
+    [session?.userId]
+  ) ?? [];
+  const patients = useLiveQuery(async () => {
+    const ids = (programs ?? []).map((program) => program.id);
+    if (!ids.length) return [];
+    return db.patients.where('programId').anyOf(ids).toArray();
+  }, [programs?.map((program) => program.id).join('|')]);
 
   if (!mounted) return <PageSkeleton />;
 
@@ -53,8 +63,7 @@ export default function DonorProgramsPage() {
           program={fundingProgram}
           onClose={() => setFundingProgram(null)}
           onSuccess={() => {
-            setFundingProgram(null);
-            toast.success('Escrow funded!');
+            toast.success('Escrow funded successfully!');
           }}
         />
       ) : null}

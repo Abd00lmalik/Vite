@@ -11,15 +11,25 @@ export function usePatient() {
   const [query, setQuery] = useState<string>('');
 
   const patient = useLiveQuery(async () => {
-    if (query) {
-      const byHealthId = await db.patients.where('healthDropId').equalsIgnoreCase(query).first();
-      if (byHealthId) return byHealthId;
-      return db.patients.where('parentPhone').equals(query).first();
-    }
-
     if (!session?.userId) return undefined;
     const user = await db.users.get(session.userId);
     if (!user?.phone) return undefined;
+
+    if (query) {
+      const lookup = query.trim();
+      const byHealthId = await db.patients.where('healthDropId').equalsIgnoreCase(lookup).first();
+      if (byHealthId && (byHealthId.userId === session.userId || byHealthId.parentPhone === user.phone)) {
+        return byHealthId;
+      }
+
+      const byPhone = await db.patients.where('parentPhone').equals(lookup).first();
+      if (byPhone && (byPhone.userId === session.userId || byPhone.parentPhone === user.phone)) {
+        return byPhone;
+      }
+
+      return null;
+    }
+
     return db.patients.where('parentPhone').equals(user.phone).first();
   }, [query, session?.userId]);
 

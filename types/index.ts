@@ -15,6 +15,7 @@ export interface User {
   idVerificationField?: string;
   roleTitle?: string;
   programPreferences?: string[];
+  isDemoUser?: boolean;
   createdAt: string;
   lastLoginAt: string;
 }
@@ -25,6 +26,7 @@ export interface AuthSession {
   name: string;
   clinicId?: string;
   organizationName?: string;
+  demo?: boolean;
   expiresAt: string;
 }
 
@@ -211,10 +213,12 @@ export interface SyncResult {
   batchId: string;
   recordCount: number;
   txHash?: string;
+  explorerUrl?: string;
   merkleRoot: string;
   grantsReleased: number;
   errors: string[];
   flaggedCount?: number;
+  mode?: 'simulated' | 'onchain';
 }
 
 export interface ProgramReport {

@@ -16,6 +16,7 @@ const DEFAULT_REST = 'https://api.xion-testnet-2.burnt.com';
 const DEFAULT_CHAIN_ID = 'xion-testnet-2';
 const DEFAULT_AUTH_APP = 'https://auth.testnet.burnt.com';
 const DEFAULT_GAS_PRICE = '0.001uxion';
+const useRealXionEnv = normalizePublicEnv(process.env.NEXT_PUBLIC_USE_REAL_XION);
 
 export const XION = {
   rpc: normalizePublicEnv(process.env.NEXT_PUBLIC_XION_RPC_URL) || DEFAULT_RPC,
@@ -33,6 +34,10 @@ export const XION = {
   },
 };
 
+export const XION_RUNTIME = {
+  useRealXion: useRealXionEnv === 'true',
+};
+
 export function explorerTxUrl(txHash: string): string {
   return `${XION.explorer}/transactions/${txHash}`;
 }
@@ -46,10 +51,13 @@ export function isConfigured(): boolean {
     XION.rpc &&
     XION.rest &&
     XION.chainId &&
-    XION.treasury &&
     XION.contracts.issuerRegistry &&
     XION.contracts.vaccinationRecord &&
     XION.contracts.milestoneChecker &&
     XION.contracts.grantEscrow
   );
+}
+
+export function shouldUseRealXion(signingClient?: unknown, senderAddress?: string): boolean {
+  return XION_RUNTIME.useRealXion && isConfigured() && !!signingClient && !!senderAddress;
 }

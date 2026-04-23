@@ -17,7 +17,7 @@ import type {
 
 function buildHealthId(seed: string): string {
   const entropy = `${seed.replace(/-/g, '')}${uuidv4().replace(/-/g, '')}`;
-  return `VITE-${entropy.slice(-6).toUpperCase()}`;
+  return `HD-${entropy.slice(-6).toUpperCase()}`;
 }
 
 export async function createUser(user: User): Promise<void> {
@@ -105,11 +105,19 @@ export async function getVaccinationsByWorker(workerId: string): Promise<Vaccina
   return db.vaccinations.where('administeredBy').equals(workerId).toArray();
 }
 
-export async function getPendingVaccinations(): Promise<VaccinationRecord[]> {
+export async function getPendingVaccinations(clinicId?: string): Promise<VaccinationRecord[]> {
+  if (clinicId) {
+    const rows = await db.vaccinations.where('clinicId').equals(clinicId).toArray();
+    return rows.filter((record) => record.syncStatus === 'pending');
+  }
   return db.vaccinations.where('syncStatus').equals('pending').toArray();
 }
 
-export async function getPendingPatients(): Promise<Patient[]> {
+export async function getPendingPatients(clinicId?: string): Promise<Patient[]> {
+  if (clinicId) {
+    const rows = await db.patients.where('clinicId').equals(clinicId).toArray();
+    return rows.filter((patient) => patient.syncStatus === 'pending');
+  }
   return db.patients.where('syncStatus').equals('pending').toArray();
 }
 
@@ -117,6 +125,12 @@ export async function markVaccinationSynced(id: string, txHash: string): Promise
   await db.vaccinations.update(id, {
     syncStatus: 'synced',
     xionTxHash: txHash,
+  });
+}
+
+export async function markPatientSynced(id: string): Promise<void> {
+  await db.patients.update(id, {
+    syncStatus: 'synced',
   });
 }
 

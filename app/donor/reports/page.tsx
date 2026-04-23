@@ -9,9 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 
 export default function DonorReportsPage() {
-  useAuth('donor');
+  const { session } = useAuth('donor');
   const mounted = useMounted();
-  const firstProgram = useLiveQuery(() => db.programs.limit(1).first(), []);
+  const firstProgram = useLiveQuery(
+    async () => {
+      if (!session) return undefined;
+      const programs = await db.programs.where('donorId').equals(session.userId).toArray();
+      return programs[0];
+    },
+    [session?.userId]
+  );
 
   if (!mounted) return <PageSkeleton />;
 

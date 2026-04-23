@@ -11,7 +11,6 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import { txFundProgram } from '@/lib/xion/contracts';
-import { sendSMS } from '@/lib/notifications/sms';
 import type { Milestone, Program } from '@/types';
 
 interface DraftMilestone {
@@ -120,7 +119,7 @@ export function ProgramCreateForm() {
     });
 
     toast.success('WHO-compliant program initialized.');
-    router.push(`/donor/dashboard`);
+    router.push(`/donor/programs/${programId}`);
   };
 
   return (
@@ -321,7 +320,7 @@ export function ProgramCreateForm() {
 
               <div className="grid gap-3 sm:grid-cols-2 pt-4">
                 <Button variant="outline" onClick={() => setStep(2)}>Adjust Configuration</Button>
-                <Button variant="primary" onClick={createProgram} disabled={!escrowTx}>Finalize & Lunch Program</Button>
+                <Button variant="primary" onClick={createProgram} disabled={!escrowTx}>Finalize & Launch Program</Button>
               </div>
             </div>
           </div>

@@ -28,7 +28,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 function buildHealthId(id: string) {
-  return `HD-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+  return `HD-${id.replace(/-/g, '').slice(-6).toUpperCase()}`;
 }
 
 export function PatientSignupForm() {
@@ -72,11 +72,11 @@ export function PatientSignupForm() {
       sex: values.sex,
       parentName: values.parentName,
       parentPhone: values.parentPhone,
-      clinicId: 'clinic-001',
-      clinicName: 'Kano Primary Health Post',
-      registeredBy: 'hw-001',
+      clinicId: 'self-service',
+      clinicName: 'Self Registration',
+      registeredBy: result.user.id,
       registeredAt: new Date().toISOString(),
-      programId: 'program-demo-001',
+      programId: undefined,
       syncStatus: 'pending',
       gpsLat: 6.5244,
       gpsLng: 3.3792,
@@ -87,9 +87,9 @@ export function PatientSignupForm() {
     await SMS.registration(
       values.parentPhone,
       values.childName,
-      'WHO Nigeria Immunisation Incentive Program',
+      'VITE Patient Registry',
       patient.healthDropId,
-      3
+      0
     );
 
     setCreatedPatient(patient);

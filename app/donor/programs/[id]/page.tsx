@@ -19,7 +19,7 @@ import { CLINIC_LOCATIONS } from '@/lib/data/clinicLocations';
 import { FundingModal } from '@/components/donor/FundingModal';
 
 export default function ProgramDetailPage() {
-  useAuth('donor');
+  const { session } = useAuth('donor');
   const mounted = useMounted();
   const params = useParams();
   const id = params.id as string;
@@ -34,7 +34,12 @@ export default function ProgramDetailPage() {
   const countryData = CLINIC_LOCATIONS.find((country) => country.id === selectedCountry);
   const stateData = countryData?.states.find((state) => state.id === selectedState);
 
-  const program = useLiveQuery(() => db.programs.get(id), [id]);
+  const program = useLiveQuery(async () => {
+    if (!session) return undefined;
+    const item = await db.programs.get(id);
+    if (!item || item.donorId !== session.userId) return undefined;
+    return item;
+  }, [id, session?.userId]);
   const patients = useLiveQuery(() => db.patients.where('programId').equals(id).toArray(), [id]);
   const grants = useLiveQuery(async () => {
     const enrolledIds = (patients ?? []).map((patient) => patient.id);
@@ -43,7 +48,20 @@ export default function ProgramDetailPage() {
   }, [patients]);
   const clinics = useLiveQuery(() => db.clinics.toArray(), []);
 
-  if (!mounted || !program) return <PageSkeleton />;
+  if (!mounted) return <PageSkeleton />;
+
+  if (!program) {
+    return (
+      <main className="min-h-screen bg-gray-50 pb-24">
+        <div className="mx-auto max-w-3xl px-4 py-16 text-center">
+          <h1 className="text-2xl font-semibold text-gray-900">Program not found</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            This program does not exist or does not belong to your donor account.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 pb-24">
@@ -54,7 +72,7 @@ export default function ProgramDetailPage() {
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900">{program.name}</h1>
                 <p className="text-sm text-gray-600">
-                  Status: {program.status} • Created {new Date(program.createdAt).toLocaleDateString()}
+                  Status: {program.status} | Created {new Date(program.createdAt).toLocaleDateString()}
                 </p>
               </div>
               <div className="text-right">
@@ -125,7 +143,7 @@ export default function ProgramDetailPage() {
               <div key={grant.id} className="rounded-lg border border-gray-200 p-3 text-sm">
                 <p className="font-semibold text-gray-900">{grant.patientName}</p>
                 <p className="text-xs text-gray-600">
-                  {grant.milestoneName} • ${grant.amount}
+                  {grant.milestoneName} | ${grant.amount}
                 </p>
               </div>
             ))}
@@ -228,8 +246,7 @@ export default function ProgramDetailPage() {
           program={program}
           onClose={() => setFundingProgramOpen(false)}
           onSuccess={() => {
-            setFundingProgramOpen(false);
-            toast.success('Escrow funded!');
+            toast.success('Escrow funded successfully!');
           }}
         />
       ) : null}

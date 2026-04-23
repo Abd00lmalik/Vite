@@ -9,15 +9,22 @@ import type { Patient } from '@/types';
 
 interface PatientSearchProps {
   onFound: (patient: Patient | null) => void;
+  clinicId?: string;
+  allowCrossClinic?: boolean;
 }
 
-export function PatientSearch({ onFound }: PatientSearchProps) {
+export function PatientSearch({ onFound, clinicId, allowCrossClinic = false }: PatientSearchProps) {
   const [phone, setPhone] = useState('+234');
   const [loading, setLoading] = useState(false);
 
   const handleSearch = async () => {
     setLoading(true);
     const patient = await db.patients.where('parentPhone').equals(phone).first();
+    if (patient && !allowCrossClinic && clinicId && patient.clinicId !== clinicId) {
+      onFound(null);
+      setLoading(false);
+      return;
+    }
     onFound(patient ?? null);
     setLoading(false);
   };
