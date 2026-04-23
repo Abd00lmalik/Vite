@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 interface StatusDotProps {
   status: 'online' | 'offline' | 'pending' | 'synced' | 'error';
@@ -15,4 +15,7 @@ const colors: Record<StatusDotProps['status'], string> = {
 export function StatusDot({ status }: StatusDotProps) {
   return <span className={`h-2.5 w-2.5 rounded-full ${colors[status]}`} />;
 }
+
+
+
 

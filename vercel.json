@@ -1,7 +1,26 @@
-﻿{
-  "installCommand": "npm install",
+{
+  "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_XION_RPC_URL": "@xion-rpc-url",
+    "NEXT_PUBLIC_XION_REST_URL": "@xion-rest-url",
+    "NEXT_PUBLIC_XION_CHAIN_ID": "@xion-chain-id",
+    "NEXT_PUBLIC_XION_TREASURY_ADDRESS": "@xion-treasury-address",
+    "NEXT_PUBLIC_XION_ISSUER_REGISTRY": "@xion-issuer-registry",
+    "NEXT_PUBLIC_XION_VACCINATION_RECORD": "@xion-vaccination-record",
+    "NEXT_PUBLIC_XION_MILESTONE_CHECKER": "@xion-milestone-checker",
+    "NEXT_PUBLIC_XION_GRANT_ESCROW": "@xion-grant-escrow",
+    "NEXT_PUBLIC_USE_REAL_XION": "@use-real-xion",
+    "NEXT_PUBLIC_XION_AUTH_APP_URL": "@xion-auth-app-url",
+    "TWILIO_ACCOUNT_SID": "@twilio-account-sid",
+    "TWILIO_AUTH_TOKEN": "@twilio-auth-token",
+    "TWILIO_FROM": "@twilio-from",
+    "NEXTAUTH_SECRET": "@nextauth-secret",
+    "NEXTAUTH_URL": "@nextauth-url"
+  }
 }
+
+
 

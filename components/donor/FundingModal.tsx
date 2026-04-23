@@ -1,28 +1,26 @@
 'use client';
-
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { AnimatePresence, motion } from 'framer-motion';
-import { X } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { X, AlertCircle } from 'lucide-react';
+import { useXion } from '@/hooks/useXion';
+import { txFundProgram } from '@/lib/xion/contracts';
 import { db } from '@/lib/db/schema';
-import { GrantEscrow } from '@/lib/blockchain/contracts';
-import { useAuthStore } from '@/store/authStore';
+import { TxSuccessCard } from '@/components/shared/TxSuccessCard';
+import { XionConnectButton } from '@/components/shared/XionConnectButton';
+import { Button } from '@/components/ui/button';
+import toast from 'react-hot-toast';
 import type { Program } from '@/types';
 
 const schema = z.object({
-  amount: z
-    .number({ invalid_type_error: 'Enter a valid amount' })
-    .min(10, 'Minimum deposit is $10')
-    .max(1000000, 'Maximum is $1,000,000'),
-  paymentMethod: z.enum(['bank_transfer', 'card', 'crypto']),
+  amountUxion: z.number({ invalid_type_error: 'Enter a valid amount' })
+    .min(1000, 'Minimum 1000 uxion (0.001 XION)')
+    .max(10_000_000_000, 'Maximum 10,000 XION'),
   reference: z.string().min(3, 'Add a payment reference'),
 });
-
 type FormData = z.infer<typeof schema>;
-type Step = 'form' | 'processing' | 'success';
+type Step = 'connect' | 'form' | 'processing' | 'success';
 
 interface Props {
   program: Program;
@@ -30,312 +28,286 @@ interface Props {
   onSuccess: () => void;
 }
 
-const PROCESSING_STEPS = [
-  'Verifying payment details...',
-  'Submitting to XION escrow contract...',
-  'Confirming on-chain...',
-];
-
 export function FundingModal({ program, onClose, onSuccess }: Props) {
-  const { session } = useAuthStore();
-  const [step, setStep] = useState<Step>('form');
-  const [txHash, setTxHash] = useState('');
-  const [fundedAmount, setFundedAmount] = useState(0);
-  const [processingStep, setProcessingStep] = useState(0);
+  const { address, signingClient, isConnected, isLoading: xionLoading } =
+    useXion();
+  const [step, setStep] = useState<Step>(isConnected ? 'form' : 'connect');
+  const [txResult, setTxResult] = useState<any>(null);
+  const [processingMsg, setProcessingMsg] = useState('');
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: { paymentMethod: 'bank_transfer', reference: '' },
-  });
+  useEffect(() => {
+    if (isConnected && step === 'connect') setStep('form');
+  }, [isConnected]);
 
-  const amount = watch('amount');
+  const { register, handleSubmit, watch, formState: { errors } } =
+    useForm<FormData>({
+      resolver: zodResolver(schema),
+      defaultValues: { amountUxion: 1_000_000, reference: '' },
+    });
+
+  const amountUxion = watch('amountUxion');
+  const amountXion  = amountUxion ? (amountUxion / 1_000_000).toFixed(3) : '0';
 
   async function onSubmit(data: FormData) {
+    if (!signingClient || !address) {
+      toast.error('Please connect your XION account first');
+      return;
+    }
+
     setStep('processing');
-    setFundedAmount(data.amount);
 
     try {
-      for (let i = 0; i < PROCESSING_STEPS.length; i += 1) {
-        setProcessingStep(i);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
+      setProcessingMsg('Submitting to XION testnet-2...');
+      const result = await txFundProgram(
+        signingClient,
+        address,
+        program.id,
+        String(data.amountUxion)
+      );
 
-      const result = await GrantEscrow.fundEscrow(program.id, data.amount, session?.userId ?? 'donor');
-      setTxHash(result.txHash);
-
+      // Update local DB
       const current = await db.programs.get(program.id);
       if (current) {
         await db.programs.update(program.id, {
-          escrowBalance: (current.escrowBalance ?? 0) + data.amount,
+          escrowBalance: (current.escrowBalance ?? 0) + data.amountUxion / 1_000_000,
         });
       }
 
+      // Audit log
       await db.auditLogs.put({
-        id: crypto.randomUUID(),
-        entityId: program.id,
-        entityType: 'program',
-        action: `Escrow funded $${data.amount} via ${data.paymentMethod}. Ref: ${data.reference}. Tx: ${result.txHash}`,
-        performedBy: session?.userId ?? 'donor',
-        timestamp: new Date().toISOString(),
+        id:          crypto.randomUUID(),
+        entityId:    program.id,
+        entityType:  'program',
+        action:      `Funded ${data.amountUxion} uxion. Tx: ${result.txHash}. Ref: ${data.reference}`,
+        performedBy: address,
+        timestamp:   new Date().toISOString(),
       });
 
-      await db.grantReleases.put({
-        id: crypto.randomUUID(),
-        patientId: 'escrow-deposit',
-        patientName: 'Escrow Deposit',
-        milestoneId: 'funding-event',
-        milestoneName: `Program Funded: ${program.name}`,
-        amount: data.amount,
-        status: 'released',
-        xionTxHash: result.txHash,
-        releasedAt: new Date().toISOString(),
-      });
-
+      setTxResult({ ...result, amountUxion: data.amountUxion });
       setStep('success');
-    } catch (_error) {
-      toast.error('Funding failed. Please try again.');
+      onSuccess();
+      toast.success('Program funded successfully!');
+
+    } catch (err: any) {
+      // Error is handled by UI toast
+      toast.error(err.message ?? 'Transaction failed. Check your balance and try again.');
       setStep('form');
     }
   }
 
+  // Prevent body scroll
   useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
+    return () => { document.body.style.overflow = ''; };
   }, []);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      className="fixed inset-0 bg-black/40 z-50 flex items-center
+                 justify-center p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <motion.div
-        initial={{ opacity: 0, y: 60 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 60 }}
-        className="max-h-[95vh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:max-w-md sm:rounded-2xl"
-      >
-        <div className="sticky top-0 flex items-start justify-between bg-teal-primary px-6 py-5">
+      <div className="bg-white rounded-xl shadow-modal w-full max-w-lg
+                      max-h-[90vh] overflow-y-auto">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-ui-border">
           <div>
-            <h2 className="text-lg font-bold text-white">Fund Program Escrow</h2>
-            <p className="mt-0.5 line-clamp-1 text-sm text-white/70">{program.name}</p>
+            <h2 className="text-lg font-semibold text-ui-text">Fund Program</h2>
+            <p className="text-sm text-ui-text-muted mt-0.5">{program.name}</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 text-white/70 transition-colors hover:text-white"
-            aria-label="Close funding modal"
-          >
+          <button onClick={onClose}
+                  className="text-ui-text-muted hover:text-ui-text transition-colors p-1">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <AnimatePresence mode="wait">
+        <div className="p-6">
+
+          {/* STEP: Connect */}
+          {step === 'connect' && (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-who-blue-light rounded-full
+                              flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-8 w-8 text-who-blue" />
+              </div>
+              <h3 className="font-semibold text-ui-text mb-2">
+                Connect Your XION Account
+              </h3>
+              <p className="text-sm text-ui-text-muted mb-6">
+                You need to connect your XION Meta Account to fund this program
+                with real testnet tokens.
+              </p>
+              {xionLoading ? (
+                <div className="flex justify-center">
+                  <div className="animate-spin h-6 w-6 border-2 border-who-blue
+                                  border-t-transparent rounded-full" />
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <XionConnectButton />
+                </div>
+              )}
+              <p className="text-xs text-ui-text-muted mt-4">
+                Log in with email or Google Ã¢â‚¬â€ no crypto wallet needed.
+                Get testnet tokens at{' '}
+                <a href="https://faucet.xion.burnt.com" target="_blank"
+                   rel="noopener noreferrer"
+                   className="text-who-blue hover:underline">
+                  faucet.xion.burnt.com
+                </a>
+              </p>
+            </div>
+          )}
+
+          {/* STEP: Form */}
           {step === 'form' && (
-            <motion.div
-              key="form"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-5 p-6"
-            >
-              <div className="flex items-center justify-between rounded-xl bg-teal-pale p-4">
+            <div className="space-y-5">
+              {/* Balance info */}
+              <div className="bg-ui-bg border border-ui-border rounded-lg p-4
+                              flex justify-between items-center">
                 <div>
-                  <p className="text-xs text-gray-500">Current Escrow Balance</p>
-                  <p className="text-2xl font-bold text-teal-dark">${(program.escrowBalance ?? 0).toLocaleString()}</p>
+                  <p className="text-xs text-ui-text-muted">Current Escrow Balance</p>
+                  <p className="text-xl font-bold text-who-blue">
+                    ${(program.escrowBalance ?? 0).toLocaleString()}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-500">Enrolled Patients</p>
-                  <p className="text-xl font-bold text-gray-700">{program.enrolledPatients ?? 0}</p>
+                  <p className="text-xs text-ui-text-muted">Connected as</p>
+                  <p className="text-sm font-mono text-ui-text">
+                    {address?.slice(0, 10)}...{address?.slice(-6)}
+                  </p>
                 </div>
               </div>
 
+              {/* Amount */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Deposit Amount (USD) *</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-semibold text-gray-400">$</span>
-                  <input
-                    {...register('amount', { valueAsNumber: true })}
-                    type="number"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-gray-200 py-3.5 pl-8 pr-4 text-lg font-semibold outline-none focus:border-transparent focus:ring-2 focus:ring-teal-primary"
-                  />
-                </div>
-                {errors.amount ? <p className="mt-1 text-xs text-red-500">{errors.amount.message}</p> : null}
-                <div className="mt-2.5 flex gap-2">
-                  {[500, 1000, 5000, 10000].map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setValue('amount', value, { shouldValidate: true })}
-                      className="flex-1 rounded-lg border border-gray-200 py-2 text-xs font-medium text-gray-600 transition-colors hover:border-teal-primary hover:bg-teal-pale"
-                    >
-                      ${value >= 1000 ? `${value / 1000}k` : value}
+                <label className="block text-sm font-medium text-ui-text mb-1.5">
+                  Amount (uxion) *
+                </label>
+                <input
+                  {...register('amountUxion', { valueAsNumber: true })}
+                  type="number"
+                  placeholder="1000000"
+                  className="input"
+                />
+                {errors.amountUxion && (
+                  <p className="text-who-red text-xs mt-1">
+                    {errors.amountUxion.message}
+                  </p>
+                )}
+                {amountUxion > 0 && (
+                  <p className="text-xs text-who-blue mt-1.5">
+                    = {amountXion} XION (testnet)
+                  </p>
+                )}
+                {/* Quick amounts */}
+                <div className="flex gap-2 mt-2">
+                  {[1_000_000, 5_000_000, 10_000_000, 50_000_000].map(v => (
+                    <button key={v} type="button"
+                            onClick={() => {
+                              const input = document.querySelector<HTMLInputElement>(
+                                'input[type="number"]'
+                              );
+                              if (input) {
+                                const nativeInputValueSetter =
+                                  Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'value'
+                                  )?.set;
+                                nativeInputValueSetter?.call(input, String(v));
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                              }
+                            }}
+                            className="flex-1 text-xs py-1.5 rounded border
+                                       border-ui-border hover:border-who-blue
+                                       hover:text-who-blue hover:bg-who-blue-light
+                                       transition-colors text-ui-text-light">
+                      {(v / 1_000_000).toFixed(0)} XION
                     </button>
                   ))}
                 </div>
-                {amount > 0 && !Number.isNaN(amount) ? (
-                  <p className="mt-2 text-xs font-medium text-teal-primary">
-                    ~ funds {Math.floor(amount / 15)} complete vaccination courses at $15 per child
-                  </p>
-                ) : null}
               </div>
 
+              {/* Reference */}
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Payment Method *</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { value: 'bank_transfer', label: 'Bank Transfer', icon: 'BANK' },
-                    { value: 'card', label: 'Credit Card', icon: 'CARD' },
-                    { value: 'crypto', label: 'XION/Crypto', icon: 'XION' },
-                  ].map((option) => (
-                    <label
-                      key={option.value}
-                      className="cursor-pointer rounded-xl border-2 border-gray-200 p-3 transition-all has-[:checked]:border-teal-primary has-[:checked]:bg-teal-pale hover:border-gray-300"
-                    >
-                      <input {...register('paymentMethod')} type="radio" value={option.value} className="sr-only" />
-                      <div className="flex flex-col items-center">
-                        <span className="mb-1 text-xs font-bold tracking-wide text-gray-600">{option.icon}</span>
-                        <span className="text-center text-xs font-medium leading-tight">{option.label}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Payment Reference *</label>
+                <label className="block text-sm font-medium text-ui-text mb-1.5">
+                  Payment Reference *
+                </label>
                 <input
                   {...register('reference')}
-                  placeholder="e.g. GIA-2026-001 or grant reference"
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-teal-primary"
+                  placeholder="e.g. GIA-2026-001"
+                  className="input"
                 />
-                {errors.reference ? <p className="mt-1 text-xs text-red-500">{errors.reference.message}</p> : null}
+                {errors.reference && (
+                  <p className="text-who-red text-xs mt-1">
+                    {errors.reference.message}
+                  </p>
+                )}
               </div>
 
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                <p className="text-xs leading-relaxed text-amber-700">
-                  <strong>Demo Mode:</strong> This simulates an escrow deposit. In production, funds would be
-                  cryptographically locked in a XION smart contract and released only when vaccination milestones are
-                  verified on-chain.
-                </p>
+              {/* Notice */}
+              <div className="bg-who-blue-light border border-who-blue/20
+                              rounded-lg p-3 text-xs text-who-blue leading-relaxed">
+                <strong>Testnet transaction:</strong> This sends real uxion tokens
+                from your XION Meta Account to the program escrow contract on
+                testnet-2. Gas fees are covered by the Treasury. Get testnet
+                tokens free at{' '}
+                <a href="https://faucet.xion.burnt.com" target="_blank"
+                   rel="noopener noreferrer" className="underline">
+                  faucet.xion.burnt.com
+                </a>
               </div>
 
               <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 rounded-xl border border-gray-200 py-3.5 font-medium text-gray-600 transition-colors hover:bg-gray-50"
-                >
+                <Button variant="outline" onClick={onClose} className="flex-1">
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="primary"
                   onClick={handleSubmit(onSubmit)}
-                  className="flex-1 rounded-xl bg-teal-primary py-3.5 font-bold text-white transition-colors hover:bg-teal-dark"
+                  className="flex-1"
                 >
-                  Deposit Funds
-                </button>
+                  Fund Program
+                </Button>
               </div>
-            </motion.div>
+            </div>
           )}
 
+          {/* STEP: Processing */}
           {step === 'processing' && (
-            <motion.div
-              key="processing"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-6 p-10 text-center"
-            >
-              <div className="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-teal-pale border-t-teal-primary" />
-              <div>
-                <h3 className="mb-1 text-lg font-semibold text-gray-800">Processing your deposit</h3>
-                <p className="text-sm text-gray-400">Do not close this window</p>
-              </div>
-              <div className="space-y-2.5">
-                {PROCESSING_STEPS.map((label, index) => {
-                  const done = index < processingStep;
-                  const active = index === processingStep;
-                  return (
-                    <div
-                      key={label}
-                      className={`flex items-center gap-3 text-sm transition-all ${
-                        done ? 'text-green-600' : active ? 'font-medium text-teal-primary' : 'text-gray-300'
-                      }`}
-                    >
-                      <span className="w-5 text-center">{done ? 'OK' : active ? '...' : 'o'}</span>
-                      {label}
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
+            <div className="text-center py-12">
+              <div className="animate-spin h-12 w-12 border-4 border-who-blue
+                              border-t-transparent rounded-full mx-auto mb-6" />
+              <p className="font-semibold text-ui-text mb-2">
+                Processing your transaction
+              </p>
+              <p className="text-sm text-ui-text-muted">{processingMsg}</p>
+              <p className="text-xs text-ui-text-muted mt-2">Do not close this window</p>
+            </div>
           )}
 
-          {step === 'success' && (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="space-y-5 p-8 text-center"
-            >
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl">
-                OK
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-800">${fundedAmount.toLocaleString()} deposited</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Funds are locked in escrow and will be released automatically as vaccination milestones are verified.
-                </p>
-              </div>
-
-              <div className="space-y-2.5 rounded-xl bg-gray-50 p-4 text-left">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">New Escrow Balance</span>
-                  <span className="font-semibold text-gray-800">
-                    ${((program.escrowBalance ?? 0) + fundedAmount).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Courses Funded</span>
-                  <span className="font-semibold text-gray-800">~{Math.floor(fundedAmount / 15)} children</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Tx Hash</span>
-                  <span className="font-mono text-xs text-gray-700">
-                    {txHash.slice(0, 10)}...{txHash.slice(-8)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Status</span>
-                  <span className="font-semibold text-gray-800">Confirmed (Simulated)</span>
-                </div>
-              </div>
-
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-600">SIMULATED - Demo Mode</p>
-
-              <button
-                type="button"
-                onClick={onSuccess}
-                className="w-full rounded-xl bg-teal-primary py-3.5 font-bold text-white transition-colors hover:bg-teal-dark"
-              >
+          {/* STEP: Success */}
+          {step === 'success' && txResult && (
+            <div className="space-y-4">
+              <TxSuccessCard
+                txHash={txResult.txHash}
+                title="Program funded successfully"
+                details={[
+                  { label: 'Amount', value: `${txResult.amountUxion} uxion` },
+                  { label: 'Program', value: program.name },
+                  { label: 'Block', value: String(txResult.height) },
+                ]}
+              />
+              <Button variant="primary" onClick={onClose} className="w-full">
                 Back to Dashboard
-              </button>
-            </motion.div>
+              </Button>
+            </div>
           )}
-        </AnimatePresence>
-      </motion.div>
+        </div>
+      </div>
     </div>
   );
 }
+
+
+

@@ -1,6 +1,7 @@
 {
   "name": "my-project",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
@@ -9,8 +10,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@burnt-labs/abstraxion": "^1.0.0-alpha.77",
     "@cosmjs/cosmwasm-stargate": "^0.38.1",
     "@cosmjs/proto-signing": "^0.38.1",
+    "@fontsource/inter": "^5.2.8",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.12",
     "@radix-ui/react-alert-dialog": "1.1.15",
@@ -71,6 +74,7 @@
     "recharts": "^2.15.0",
     "sonner": "^1.7.1",
     "tailwind-merge": "^3.5.0",
+    "twilio": "^6.0.0",
     "uuid": "^13.0.0",
     "vaul": "^1.1.2",
     "zod": "^3.25.76",

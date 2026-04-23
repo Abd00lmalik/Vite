@@ -9,13 +9,14 @@ interface QRDisplayProps {
   healthDropId: string;
   patientName?: string;
   size?: number;
+  beneficiary?: string;
 }
 
 function maskLink(value: string) {
   return value.length > 48 ? `${value.slice(0, 44)}...` : value;
 }
 
-export function QRDisplay({ healthDropId, patientName, size = 240 }: QRDisplayProps) {
+export function QRDisplay({ healthDropId, patientName, size = 240, beneficiary }: QRDisplayProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -23,6 +24,15 @@ export function QRDisplay({ healthDropId, patientName, size = 240 }: QRDisplayPr
   }, []);
 
   const value = useMemo(() => {
+    return JSON.stringify({
+      type: 'record',
+      id: healthDropId,
+      beneficiary: beneficiary || null,
+      timestamp: new Date().toISOString(),
+    });
+  }, [healthDropId, beneficiary]);
+
+  const recordUrl = useMemo(() => {
     const relativeUrl = buildRecordUrl(healthDropId);
     if (!mounted || typeof window === 'undefined') return relativeUrl;
     return new URL(relativeUrl, window.location.origin).toString();
@@ -70,7 +80,7 @@ export function QRDisplay({ healthDropId, patientName, size = 240 }: QRDisplayPr
         return;
       }
 
-      await navigator.clipboard.writeText(value);
+      await navigator.clipboard.writeText(recordUrl);
       toast.success('Record link copied to clipboard');
     } catch {
       toast.error('Unable to share this QR link');
@@ -84,7 +94,7 @@ export function QRDisplay({ healthDropId, patientName, size = 240 }: QRDisplayPr
       </div>
       <p className="mt-3 text-sm font-medium text-gray-900">{patientName ?? 'Patient QR'}</p>
       <p className="font-mono text-xs text-gray-500">{healthDropId}</p>
-      <p className="mt-1 text-xs text-gray-500">{maskLink(value)}</p>
+      <p className="mt-1 text-xs text-gray-500">{maskLink(recordUrl)}</p>
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
@@ -105,3 +115,6 @@ export function QRDisplay({ healthDropId, patientName, size = 240 }: QRDisplayPr
     </div>
   );
 }
+
+
+

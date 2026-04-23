@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { PaymentReceipt } from '@/components/shared/PaymentReceipt';
 import { db } from '@/lib/db/schema';
 import { SMS } from '@/lib/notifications/sms';
@@ -64,7 +64,7 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
           amount={amount}
           phone={phone}
           patientName={patient.name}
-          provider="OPay (Simulated)"
+          provider="Mobile Money Transfer"
           transactionId={receiptId}
           timestamp={new Date().toISOString()}
         />
@@ -78,32 +78,32 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
   if (step === 'processing') {
     return (
       <Card>
-        <CardContent className="space-y-3 p-5 text-sm text-gray-700">
+        <div className="space-y-3 text-sm text-ui-text">
           {PROCESSING_STEPS.map((label, index) => (
             <div key={label} className="flex items-center gap-2">
               {index <= progressIndex ? (
-                <span className="text-green-600">OK</span>
+                <span className="text-who-green font-semibold">Ã¢Å“â€œ</span>
               ) : (
-                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-teal-primary" />
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-ui-border border-t-who-blue" />
               )}
-              <p className={index <= progressIndex ? 'text-green-700' : 'text-gray-600'}>{label}</p>
+              <p className={index <= progressIndex ? 'text-who-green' : 'text-ui-text-muted'}>{label}</p>
             </div>
           ))}
-        </CardContent>
+        </div>
       </Card>
     );
   }
 
   return (
     <Card>
-      <CardContent className="space-y-3 p-4">
-        <p className="text-sm text-gray-700">
+      <div className="space-y-3">
+        <p className="text-sm text-ui-text">
           You have ${amount.toFixed(2)} available. Confirm transfer to {maskPhone(phone)}?
         </p>
         <input
           value={phone}
           onChange={(event) => setPhone(event.target.value)}
-          className="h-12 w-full rounded-lg border border-gray-300 px-3 text-base"
+          className="input"
         />
         <Button
           className="w-full"
@@ -120,7 +120,7 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
                   phone,
                   amount: grant.amount,
                   currency: 'USD',
-                  provider: 'OPay (Simulated)',
+                  provider: 'Mobile Money Transfer',
                   timestamp: new Date().toISOString(),
                   status: 'success',
                 },
@@ -135,7 +135,10 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
         >
           Confirm Redemption
         </Button>
-      </CardContent>
+      </div>
     </Card>
   );
 }
+
+
+

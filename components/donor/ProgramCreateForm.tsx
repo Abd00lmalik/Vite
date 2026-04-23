@@ -1,17 +1,16 @@
-﻿'use client';
+'use client';
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
+import { useAbstraxionAccount, useAbstraxionSigningClient } from '@burnt-labs/abstraxion';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { Card } from '@/components/ui/card';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
-import { GrantEscrow } from '@/lib/blockchain/contracts';
+import { txFundProgram } from '@/lib/xion/contracts';
 import { sendSMS } from '@/lib/notifications/sms';
 import type { Milestone, Program } from '@/types';
 
@@ -24,14 +23,17 @@ interface DraftMilestone {
 }
 
 const defaultMilestones: DraftMilestone[] = [
-  { id: uuidv4(), name: 'Milestone 1', vaccineName: 'DTP', doseNumber: 1, grantAmount: 3 },
-  { id: uuidv4(), name: 'Milestone 2', vaccineName: 'DTP', doseNumber: 2, grantAmount: 3 },
-  { id: uuidv4(), name: 'Milestone 3', vaccineName: 'Measles', doseNumber: 1, grantAmount: 5 },
+  { id: uuidv4(), name: 'Early Completion', vaccineName: 'DTP', doseNumber: 1, grantAmount: 5 },
+  { id: uuidv4(), name: 'Follow-up Success', vaccineName: 'OPV', doseNumber: 2, grantAmount: 5 },
+  { id: uuidv4(), name: 'Protection Milestone', vaccineName: 'Measles', doseNumber: 1, grantAmount: 10 },
 ];
 
 export function ProgramCreateForm() {
   const router = useRouter();
   const { session } = useAuthStore();
+  const { client } = useAbstraxionSigningClient();
+  const { data: account } = useAbstraxionAccount();
+  
   const [step, setStep] = useState(1);
   const [funding, setFunding] = useState(false);
   const [escrowTx, setEscrowTx] = useState('');
@@ -41,22 +43,39 @@ export function ProgramCreateForm() {
   const [description, setDescription] = useState('');
   const [scope, setScope] = useState('State');
   const [enrollmentType, setEnrollmentType] = useState<'partner clinics only' | 'open enrollment'>('partner clinics only');
-  const [estimatedEnrollment, setEstimatedEnrollment] = useState(400);
+  const [estimatedEnrollment, setEstimatedEnrollment] = useState(500);
   const [milestones, setMilestones] = useState<DraftMilestone[]>(defaultMilestones);
 
   const totalPerChild = useMemo(() => milestones.reduce((sum, item) => sum + item.grantAmount, 0), [milestones]);
-  const requiredEscrow = useMemo(() => totalPerChild * estimatedEnrollment, [estimatedEnrollment, totalPerChild]);
+  const requiredEscrowXION = useMemo(() => totalPerChild * estimatedEnrollment, [estimatedEnrollment, totalPerChild]);
+  const requiredEscrowUxion = useMemo(() => (requiredEscrowXION * 1_000_000).toString(), [requiredEscrowXION]);
 
   const fundEscrow = async () => {
+    if (!client || !account.bech32Address) {
+      toast.error('Please connect your XION account first');
+      return;
+    }
+    
     setFunding(true);
-    const result = await GrantEscrow.fundEscrow('draft-program', requiredEscrow, session?.userId ?? 'donor-001');
-    setEscrowTx(result.txHash);
-    setFunding(false);
-    toast.success(`Escrow funded. Tx: ${result.txHash.slice(0, 12)}... [SIMULATED]`);
+    try {
+      const tempProgramId = `tmp-${Date.now()}`; // For escrow setup
+      const result = await txFundProgram(client, account.bech32Address, tempProgramId, requiredEscrowUxion);
+      setEscrowTx(result.txHash);
+      toast.success('Escrow funded successfully on-chain');
+    } catch (error) {
+      // Error is handled by UI toast
+      toast.error('Funding failed. Verify your balance.');
+    } finally {
+      setFunding(false);
+    }
   };
 
   const createProgram = async () => {
     if (!session) return;
+    if (!escrowTx) {
+      toast.error('You must fund the escrow before creating the program');
+      return;
+    }
 
     const programId = uuidv4();
     const fullMilestones: Milestone[] = milestones.map((item) => ({
@@ -80,7 +99,7 @@ export function ProgramCreateForm() {
       description,
       geographicScope: [scope],
       enrollmentType,
-      escrowBalance: requiredEscrow,
+      escrowBalance: requiredEscrowXION,
       totalReleased: 0,
       milestones: fullMilestones,
       enrolledPatients: 0,
@@ -90,206 +109,227 @@ export function ProgramCreateForm() {
 
     await db.programs.put(program);
     await db.milestones.bulkPut(fullMilestones);
+    
     await db.auditLogs.put({
       id: uuidv4(),
       entityId: program.id,
       entityType: 'program',
-      action: `Program created with ${fullMilestones.length} milestones`,
+      action: `Program created. XION Tx: ${escrowTx}`,
       performedBy: session.userId,
       timestamp: new Date().toISOString(),
     });
 
-    const clinics = await db.clinics.toArray();
-    for (const clinic of clinics) {
-      await sendSMS('+2348000000000', `New program available: ${program.name}`, 'system');
-      await db.notifications.put({
-        id: uuidv4(),
-        userId: clinic.id,
-        type: 'system',
-        message: `New program available for clinic onboarding: ${program.name}`,
-        read: false,
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    toast.success('Program created successfully.');
-    router.push(`/donor/programs/${program.id}`);
+    toast.success('WHO-compliant program initialized.');
+    router.push(`/donor/dashboard`);
   };
 
   return (
-    <Card>
-      <CardContent className="space-y-4 p-4">
-        <div>
-          <p className="text-sm font-medium text-gray-700">Step {step} of 3</p>
-          <ProgressBar value={(step / 3) * 100} className="mt-2" />
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="flex-1">
+          <p className="text-xs font-bold text-who-blue uppercase tracking-widest mb-1.5">Setup Progress: Step {step} of 3</p>
+          <ProgressBar value={(step / 3) * 100} />
         </div>
+      </div>
 
-        {step === 1 ? (
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Program name</label>
-              <Input value={name} onChange={(event) => setName(event.target.value)} />
+      <Card>
+        {step === 1 && (
+          <div className="space-y-5">
+            <h3 className="text-lg font-bold text-ui-text border-b border-ui-border pb-3">Program Foundations</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-ui-text">Program Identifier</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} className="input" placeholder="e.g. Northern Region Polio Response" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-ui-text">Strategic Goal</label>
+                <select value={type} onChange={(e) => setType(e.target.value as any)} className="input">
+                  <option value="vaccination completion">Vaccination Completion</option>
+                  <option value="antenatal visits">Antenatal Visits</option>
+                  <option value="child growth">Nutrition & Growth</option>
+                </select>
+              </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Program type</label>
-              <Select
-                value={type}
-                onChange={(event) => setType(event.target.value as typeof type)}
-                options={[
-                  { value: 'vaccination completion', label: 'vaccination completion' },
-                  { value: 'antenatal visits', label: 'antenatal visits' },
-                  { value: 'child growth', label: 'child growth' },
-                ]}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+              <label className="mb-1.5 block text-sm font-semibold text-ui-text">Humanitarian Mission Statement</label>
               <textarea
-                className="min-h-[96px] w-full rounded-lg border border-gray-300 p-3 text-base"
+                className="input min-h-[100px]"
                 value={description}
-                onChange={(event) => setDescription(event.target.value)}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe the clinical impact and target population..."
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Geographic scope</label>
-              <Select
-                value={scope}
-                onChange={(event) => setScope(event.target.value)}
-                options={[
-                  { value: 'LGA', label: 'LGA' },
-                  { value: 'State', label: 'State' },
-                  { value: 'National', label: 'National' },
-                ]}
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-ui-text">Geographic Scope</label>
+                <select value={scope} onChange={(e) => setScope(e.target.value)} className="input">
+                  <option value="LGA">Local Government Area (LGA)</option>
+                  <option value="State">Provincial / State Level</option>
+                  <option value="National">National Coverage</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-ui-text">Enrollment Policy</label>
+                <select value={enrollmentType} onChange={(e) => setEnrollmentType(e.target.value as any)} className="input">
+                  <option value="partner clinics only">Partner Clinics Only (Controlled)</option>
+                  <option value="open enrollment">Open Enrollment (Public)</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Enrollment type</label>
-              <Select
-                value={enrollmentType}
-                onChange={(event) => setEnrollmentType(event.target.value as typeof enrollmentType)}
-                options={[
-                  { value: 'partner clinics only', label: 'partner clinics only' },
-                  { value: 'open enrollment', label: 'open enrollment' },
-                ]}
-              />
-            </div>
-            <Button type="button" className="w-full" onClick={() => setStep(2)}>
-              Next: Milestones
+            <Button variant="primary" className="w-full h-12" onClick={() => setStep(2)}>
+              Configure Grant Milestones
             </Button>
           </div>
-        ) : null}
+        )}
 
-        {step === 2 ? (
-          <div className="space-y-3">
-            {milestones.map((milestone, index) => (
-              <div key={milestone.id} className="grid gap-2 rounded-lg border border-gray-200 p-3 sm:grid-cols-4">
-                <Input
-                  value={milestone.name}
-                  onChange={(event) => {
-                    const next = [...milestones];
-                    next[index] = { ...next[index], name: event.target.value };
-                    setMilestones(next);
-                  }}
-                  placeholder="Milestone name"
-                />
-                <Select
-                  value={milestone.vaccineName}
-                  onChange={(event) => {
-                    const next = [...milestones];
-                    next[index] = { ...next[index], vaccineName: event.target.value };
-                    setMilestones(next);
-                  }}
-                  options={[
-                    { value: 'DTP', label: 'DTP' },
-                    { value: 'OPV', label: 'OPV' },
-                    { value: 'Measles', label: 'Measles' },
-                    { value: 'BCG', label: 'BCG' },
-                    { value: 'Yellow Fever', label: 'Yellow Fever' },
-                  ]}
-                />
-                <Input
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={milestone.doseNumber}
-                  onChange={(event) => {
-                    const next = [...milestones];
-                    next[index] = { ...next[index], doseNumber: Number(event.target.value) || 1 };
-                    setMilestones(next);
-                  }}
-                />
-                <Input
-                  type="number"
-                  min={0}
-                  value={milestone.grantAmount}
-                  onChange={(event) => {
-                    const next = [...milestones];
-                    next[index] = { ...next[index], grantAmount: Number(event.target.value) || 0 };
-                    setMilestones(next);
-                  }}
-                />
-              </div>
-            ))}
+        {step === 2 && (
+          <div className="space-y-5">
+            <h3 className="text-lg font-bold text-ui-text border-b border-ui-border pb-3">Grant Milestone Engineering</h3>
+            <p className="text-sm text-ui-text-muted">Define conditional transfers to be triggered by verified clinical records.</p>
+            
+            <div className="space-y-3">
+              {milestones.map((milestone, index) => (
+                <div key={milestone.id} className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-ui-bg p-3 rounded-lg border border-ui-border">
+                  <input
+                    value={milestone.name}
+                    onChange={(e) => {
+                      const next = [...milestones];
+                      next[index].name = e.target.value;
+                      setMilestones(next);
+                    }}
+                    className="input h-9 text-sm"
+                    placeholder="Label"
+                  />
+                  <select
+                    value={milestone.vaccineName}
+                    onChange={(e) => {
+                      const next = [...milestones];
+                      next[index].vaccineName = e.target.value;
+                      setMilestones(next);
+                    }}
+                    className="input h-9 text-sm"
+                  >
+                    <option value="DTP">DTP</option>
+                    <option value="OPV">OPV</option>
+                    <option value="Measles">Measles</option>
+                    <option value="BCG">BCG</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-ui-text-muted">Dose</span>
+                    <input
+                      type="number"
+                      value={milestone.doseNumber}
+                      onChange={(e) => {
+                        const next = [...milestones];
+                        next[index].doseNumber = Number(e.target.value);
+                        setMilestones(next);
+                      }}
+                      className="input h-9 text-sm w-full"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-ui-text-muted">$</span>
+                    <input
+                      type="number"
+                      value={milestone.grantAmount}
+                      onChange={(e) => {
+                        const next = [...milestones];
+                        next[index].grantAmount = Number(e.target.value);
+                        setMilestones(next);
+                      }}
+                      className="input h-9 text-sm w-full font-bold text-who-blue"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
 
             <Button
-              type="button"
               variant="outline"
-              className="w-full"
+              className="w-full text-xs"
               onClick={() =>
                 setMilestones((prev) => [
                   ...prev,
-                  { id: uuidv4(), name: `Milestone ${prev.length + 1}`, vaccineName: 'DTP', doseNumber: 1, grantAmount: 3 },
+                  { id: uuidv4(), name: `Addition`, vaccineName: 'DTP', doseNumber: 1, grantAmount: 5 },
                 ])
               }
             >
-              Add Milestone
+              + Add Strategic Milestone
             </Button>
 
-            <p className="text-sm text-gray-700">Total per child: ${totalPerChild.toFixed(2)} if all milestones are completed.</p>
+            <div className="bg-who-blue-light p-4 rounded-lg flex justify-between items-center text-who-blue border border-who-blue/20">
+              <span className="text-sm font-semibold">Allocated Grant per Beneficiary</span>
+              <span className="text-2xl font-black">${totalPerChild.toFixed(2)}</span>
+            </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button type="button" variant="outline" className="w-full" onClick={() => setStep(1)}>
-                Back
-              </Button>
-              <Button type="button" className="w-full" onClick={() => setStep(3)}>
-                Next: Fund Escrow
-              </Button>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
+              <Button variant="primary" onClick={() => setStep(3)}>Continue to Funding</Button>
             </div>
           </div>
-        ) : null}
+        )}
 
-        {step === 3 ? (
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Estimated enrollment (children)</label>
-              <Input
-                type="number"
-                value={estimatedEnrollment}
-                onChange={(event) => setEstimatedEnrollment(Number(event.target.value) || 0)}
-              />
-            </div>
-            <div className="rounded-lg bg-teal-50 p-3 text-sm text-teal-dark">
-              Required escrow: ${requiredEscrow.toFixed(2)} (enrollment x ${totalPerChild.toFixed(2)})
-            </div>
+        {step === 3 && (
+          <div className="space-y-5">
+            <h3 className="text-lg font-bold text-ui-text border-b border-ui-border pb-3">Trustless Escrow Allocation</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-ui-text">Target Beneficiary Population</label>
+                <input
+                  type="number"
+                  value={estimatedEnrollment}
+                  onChange={(e) => setEstimatedEnrollment(Number(e.target.value))}
+                  className="input text-lg font-bold text-who-blue"
+                />
+                <p className="mt-1.5 text-xs text-ui-text-muted">Funding must be fully allocated to ensure guaranteed transfers upon fulfillment.</p>
+              </div>
 
-            <Button type="button" className="w-full" onClick={fundEscrow} loading={funding}>
-              Fund Escrow via XION
-            </Button>
-            {escrowTx ? <p className="text-xs font-mono text-gray-600">Escrow funded. Tx: {escrowTx} [SIMULATED]</p> : null}
+              <div className="bg-who-blue text-white rounded-xl p-6 shadow-panel">
+                <p className="text-xs font-bold opacity-70 uppercase tracking-widest mb-1">Total XION Allocation Required</p>
+                <p className="text-4xl font-black tracking-tighter">${requiredEscrowXION.toLocaleString()}</p>
+                <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] font-bold opacity-60 uppercase">Per Beneficiary</p>
+                    <p className="text-lg font-bold">${totalPerChild}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold opacity-60 uppercase">Target Reach</p>
+                    <p className="text-lg font-bold">{estimatedEnrollment.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button type="button" variant="outline" className="w-full" onClick={() => setStep(2)}>
-                Back
-              </Button>
-              <Button type="button" className="w-full" onClick={createProgram}>
-                Create Program
-              </Button>
+              {!escrowTx ? (
+                <Button 
+                  variant="primary" 
+                  className="w-full h-14 text-lg shadow-lg" 
+                  onClick={fundEscrow} 
+                  loading={funding}
+                >
+                  Authorize XION Escrow Funding
+                </Button>
+              ) : (
+                <div className="bg-who-green-light border border-who-green/30 p-4 rounded-lg">
+                  <p className="text-who-green font-bold text-sm flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-who-green animate-pulse" />
+                    Escrow Verified on XION Chain
+                  </p>
+                  <p className="text-[10px] font-mono mt-1 text-who-green/70 truncate">{escrowTx}</p>
+                </div>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2 pt-4">
+                <Button variant="outline" onClick={() => setStep(2)}>Adjust Configuration</Button>
+                <Button variant="primary" onClick={createProgram} disabled={!escrowTx}>Finalize & Lunch Program</Button>
+              </div>
             </div>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+        )}
+      </Card>
+    </div>
   );
 }
+
 
 

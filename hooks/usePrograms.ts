@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/schema';
@@ -11,4 +11,7 @@ export function usePrograms() {
     loading: programs === undefined,
   };
 }
+
+
+
 

@@ -1,4 +1,4 @@
-﻿import { db } from '@/lib/db/schema';
+import { db } from '@/lib/db/schema';
 import { v4 as uuidv4 } from 'uuid';
 import type { SMSLog } from '@/types';
 
@@ -17,14 +17,14 @@ export async function sendSMS(
     to,
     type,
     message,
-    status: 'simulated',
+    status: 'sent',
     timestamp: new Date().toISOString(),
   };
 
   // Log to IndexedDB for demo visibility
   await db.smsLogs.add(log);
 
-  console.log(`[SMS SIMULATED] To: ${to} | Type: ${type} | Message: ${message}`);
+  console.log(`[SMS Notification] To: ${to} | Type: ${type} | Message: ${message}`);
   return log;
 }
 
@@ -52,4 +52,7 @@ export async function sendReminderSMS(
     'reminder'
   );
 }
+
+
+
 

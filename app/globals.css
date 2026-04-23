@@ -1,50 +1,97 @@
-﻿@import 'tailwindcss';
+@import 'tailwindcss';
+@config '../tailwind.config.ts';
 
-:root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --font-sans: 'Inter', system-ui, sans-serif;
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
 
-  --color-teal-primary: #007B83;
-  --color-teal-dark: #005A61;
-  --color-teal-pale: #E0F4F5;
-  --color-teal-50: #f0fafb;
-  --color-teal-100: #cceff1;
-  --color-accent: #F4A124;
-
-  --color-status-success: #27AE60;
-  --color-status-warning: #F39C12;
-  --color-status-error: #E74C3C;
-  --color-status-info: #2980B9;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #333333;
+    background-color: #F7F9FC;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    color: #333333;
+    line-height: 1.3;
+  }
+  p {
+    line-height: 1.6;
+    color: #666666;
+  }
+  a {
+    color: #005EB8;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
 }
 
-@theme inline {
-  --font-sans: var(--font-sans);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+@layer components {
+  /* ── Primary Button ── */
+  .btn-primary {
+    @apply bg-who-blue text-white px-6 py-3 rounded font-semibold text-sm
+           hover:bg-who-blue-dark transition-colors duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-who-blue focus:ring-offset-2;
+  }
 
-  --color-teal-primary: var(--color-teal-primary);
-  --color-teal-dark: var(--color-teal-dark);
-  --color-teal-pale: var(--color-teal-pale);
-  --color-teal-50: var(--color-teal-50);
-  --color-teal-100: var(--color-teal-100);
-  --color-accent: var(--color-accent);
+  /* ── Secondary Button ── */
+  .btn-secondary {
+    @apply bg-white text-who-blue border border-who-blue px-6 py-3 rounded
+           font-semibold text-sm hover:bg-who-blue-light transition-colors
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
 
-  --color-status-success: var(--color-status-success);
-  --color-status-warning: var(--color-status-warning);
-  --color-status-error: var(--color-status-error);
-  --color-status-info: var(--color-status-info);
+  /* ── Outline Button ── */
+  .btn-outline {
+    @apply bg-white text-ui-text border border-ui-border px-6 py-3 rounded
+           font-medium text-sm hover:bg-ui-bg transition-colors;
+  }
+
+  /* ── Orange/Accent Button ── */
+  .btn-accent {
+    @apply bg-who-orange text-white px-6 py-3 rounded font-semibold text-sm
+           hover:opacity-90 transition-opacity disabled:opacity-50;
+  }
+
+  /* ── Card ── */
+  .card {
+    @apply bg-white border border-ui-border rounded-lg shadow-card p-6;
+  }
+
+  /* ── Stat Card ── */
+  .stat-card {
+    @apply bg-white border border-ui-border rounded-lg p-5 shadow-card;
+  }
+
+  /* ── Form Input ── */
+  .input {
+    @apply w-full border border-ui-border rounded px-4 py-2.5 text-sm
+           text-ui-text bg-white focus:outline-none focus:ring-2
+           focus:ring-who-blue focus:border-who-blue transition-colors;
+  }
+
+  /* ── Badge ── */
+  .badge-blue   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-blue-light text-who-blue; }
+  .badge-orange { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-orange-light text-who-orange; }
+  .badge-green  { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-green-light text-who-green; }
+  .badge-gray   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600; }
+  .badge-red    { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-red-light text-who-red; }
+
+  /* ── Section Header ── */
+  .section-header {
+    @apply border-b border-ui-border pb-4 mb-6;
+  }
 }
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-}
-

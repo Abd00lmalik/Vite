@@ -1,4 +1,4 @@
-﻿import { db } from '@/lib/db/schema';
+import { db } from '@/lib/db/schema';
 import type { ProgramReport } from '@/types';
 
 export async function generateReport(programId: string): Promise<ProgramReport> {
@@ -110,4 +110,7 @@ export function exportToPrintableHTML(report: ProgramReport): void {
   popup.document.write(html);
   popup.document.close();
 }
+
+
+
 

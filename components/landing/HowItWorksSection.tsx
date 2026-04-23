@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
@@ -44,4 +44,7 @@ export function HowItWorksSection() {
     </section>
   );
 }
+
+
+
 

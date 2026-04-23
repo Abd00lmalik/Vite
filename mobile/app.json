@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "VITE Health Worker",
+    "slug": "vite-health-worker",
+    "version": "1.0.0",
+    "scheme": "vitehealthworker",
+    "orientation": "portrait",
+    "backgroundColor": "#000000",
+    "platforms": ["ios", "android"],
+    "android": {
+      "package": "com.vitehealth.worker",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.vitehealth.worker",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "GPS coordinates are embedded in vaccination records for audit purposes.",
+        "NSCameraUsageDescription": "Camera is used to scan patient QR codes."
+      }
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-location",
+      [
+        "expo-barcode-scanner",
+        { "cameraPermission": "Allow VITE to scan patient QR codes." }
+      ]
+    ],
+    "extra": {
+      "eas": { "projectId": "vite-health-worker" }
+    }
+  }
+}
+
+
+

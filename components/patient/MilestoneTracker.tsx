@@ -1,4 +1,4 @@
-﻿import { Timeline } from '@/components/ui/Timeline';
+import { Timeline } from '@/components/ui/Timeline';
 import type { Milestone, VaccinationRecord } from '@/types';
 
 interface MilestoneTrackerProps {
@@ -21,12 +21,15 @@ export function MilestoneTracker({ milestones, records }: MilestoneTrackerProps)
       id: milestone.id,
       title: milestone.name,
       caption: completed
-        ? `Completed • $${milestone.grantAmount}`
-        : `Pending • $${milestone.grantAmount}`,
+        ? `Completed â€¢ $${milestone.grantAmount}`
+        : `Pending â€¢ $${milestone.grantAmount}`,
       status: completed ? ('complete' as const) : ('pending' as const),
     };
   });
 
   return <Timeline items={items} />;
 }
+
+
+
 

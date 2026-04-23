@@ -1,4 +1,4 @@
-﻿export async function wipeDatabaseIfCorrupt(): Promise<void> {
+export async function wipeDatabaseIfCorrupt(): Promise<void> {
   if (typeof window === 'undefined') return;
 
   const CURRENT_VERSION = 3;
@@ -23,4 +23,7 @@
     localStorage.setItem('vite_db_version', String(CURRENT_VERSION));
   }
 }
+
+
+
 

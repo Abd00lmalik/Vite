@@ -1,13 +1,16 @@
-﻿'use client';
+'use client';
 
 import { useEffect } from 'react';
-import { seedDemoData } from '@/lib/seed/demo';
+import { seedInitialData } from '@/lib/seed/initialData';
 
 export function AppBootstrap() {
   useEffect(() => {
-    seedDemoData().catch(() => undefined);
+    seedInitialData().catch(() => undefined);
   }, []);
 
   return null;
 }
+
+
+
 

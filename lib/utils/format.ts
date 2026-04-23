@@ -1,4 +1,4 @@
-﻿import { format } from 'date-fns';
+import { format } from 'date-fns';
 
 export function formatCurrency(amount: number, currency: 'USD' | 'NGN' = 'USD'): string {
   if (currency === 'NGN') {
@@ -38,4 +38,7 @@ export function shortTxHash(txHash?: string): string {
   if (txHash.length <= 16) return txHash;
   return `${txHash.slice(0, 8)}...${txHash.slice(-4)}`;
 }
+
+
+
 

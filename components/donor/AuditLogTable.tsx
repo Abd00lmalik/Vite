@@ -1,4 +1,4 @@
-﻿import type { AuditLog } from '@/types';
+import type { AuditLog } from '@/types';
 
 interface AuditLogTableProps {
   logs: AuditLog[];
@@ -34,4 +34,7 @@ export function AuditLogTable({ logs }: AuditLogTableProps) {
     </div>
   );
 }
+
+
+
 

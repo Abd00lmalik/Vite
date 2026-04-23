@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -25,4 +25,7 @@ export function useAuth(requiredRole?: UserRole) {
 
   return { session, isAuthenticated };
 }
+
+
+
 

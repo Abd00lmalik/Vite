@@ -1,4 +1,4 @@
-﻿import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/badge';
 import type { VaccinationRecord } from '@/types';
 
 interface VaccinationTimelineProps {
@@ -29,5 +29,8 @@ export function VaccinationTimeline({ records }: VaccinationTimelineProps) {
     </div>
   );
 }
+
+
+
 
 

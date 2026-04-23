@@ -32,3 +32,6 @@ export function Skeleton({ variant = 'text', className, ...props }: SkeletonProp
 
   return <div className={cn('h-4 w-32 animate-pulse rounded bg-gray-200', className)} {...props} />;
 }
+
+
+

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -7,18 +7,15 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { QRScanner } from '@/components/shared/QRScanner';
 import { PatientSearch } from './PatientSearch';
 import { VaccinationTimeline } from '@/components/patient/VaccinationTimeline';
 import { captureGPS } from '@/lib/utils/gps';
 import { createVaccination } from '@/lib/db/db';
 import { db } from '@/lib/db/schema';
-import { DEMO_VACCINE_LOTS } from '@/lib/seed/demo';
+import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
 import { useAuthStore } from '@/store/authStore';
 import type { Patient, VaccinationRecord } from '@/types';
 
@@ -71,7 +68,7 @@ export function VaccinationForm() {
   }, []);
 
   const lotsForSelectedVaccine = useMemo(
-    () => DEMO_VACCINE_LOTS.filter((lot) => lot.vaccineName === selectedVaccine),
+    () => INITIAL_VACCINE_LOTS.filter((lot) => lot.vaccineName === selectedVaccine),
     [selectedVaccine]
   );
 
@@ -92,7 +89,7 @@ export function VaccinationForm() {
     setHistory(records);
   };
 
-  const selectedLot = DEMO_VACCINE_LOTS.find((lot) => lot.lotNumber === selectedLotNumber);
+  const selectedLot = INITIAL_VACCINE_LOTS.find((lot) => lot.lotNumber === selectedLotNumber);
   const remainingDoses = selectedLot ? selectedLot.dosesRegistered - selectedLot.dosesUsed : 0;
   const lotIsUnknown = !!selectedLotNumber && !selectedLot;
   const lotVaccineMismatch = !!selectedLot && !!selectedVaccine && selectedLot.vaccineName !== selectedVaccine;
@@ -105,15 +102,17 @@ export function VaccinationForm() {
       return;
     }
 
-    const matchedLot = DEMO_VACCINE_LOTS.find((lot) => lot.lotNumber === values.lotNumber);
-    if (!matchedLot) {
-      toast.error('Lot not in registry');
-      return;
-    }
+    const matchedLot = INITIAL_VACCINE_LOTS.find((lot) => lot.lotNumber === values.lotNumber);
+    const recordId = uuidv4();
+    let autoDispute = false;
+    let disputeReason = '';
 
-    if (matchedLot.vaccineName !== values.vaccineName) {
-      toast.error('Lot number does not match selected vaccine');
-      return;
+    if (!matchedLot) {
+      autoDispute = true;
+      disputeReason = `Manual lot entry: ${values.lotNumber} is not in the recognized registry.`;
+    } else if (matchedLot.vaccineName !== values.vaccineName) {
+      autoDispute = true;
+      disputeReason = `Lot/Vaccine mismatch: Lot ${values.lotNumber} is registered for ${matchedLot.vaccineName}, but used for ${values.vaccineName}.`;
     }
 
     const duplicate = history.find(
@@ -149,14 +148,27 @@ export function VaccinationForm() {
       notes: values.notes,
     });
 
-    matchedLot.dosesUsed += 1;
+    if (matchedLot) {
+      matchedLot.dosesUsed += 1;
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     const workerTodayCount = (await db.vaccinations.where('administeredBy').equals(session.userId).toArray()).filter(
       (entry) => entry.dateAdministered === today
     ).length;
 
-    if (workerTodayCount > 50) {
+    if (autoDispute) {
+      await db.disputes.put({
+        id: uuidv4(),
+        recordId: record.id,
+        patientId: patient.id,
+        raisedBy: 'system',
+        reason: disputeReason,
+        evidence: `Lot Number: ${values.lotNumber}, Selected Vaccine: ${values.vaccineName}`,
+        status: 'open',
+        createdAt: new Date().toISOString(),
+      });
+    } else if (workerTodayCount > 50) {
       await db.disputes.put({
         id: uuidv4(),
         recordId: record.id,
@@ -194,22 +206,32 @@ export function VaccinationForm() {
   };
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Patient Lookup</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant={lookupMode === 'phone' ? 'primary' : 'outline'} onClick={() => setLookupMode('phone')}>
-              Search by Phone
-            </Button>
-            <Button type="button" variant={lookupMode === 'qr' ? 'primary' : 'outline'} onClick={() => setLookupMode('qr')}>
-              Scan QR Code
-            </Button>
+        <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Patient Identification</h3>
+        <div className="space-y-4">
+          <div className="flex gap-2 p-1 bg-ui-bg rounded-lg border border-ui-border">
+            <button
+              type="button"
+              onClick={() => setLookupMode('phone')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded ${
+                lookupMode === 'phone' ? 'bg-white shadow-sm text-who-blue' : 'text-ui-text-muted hover:text-ui-text'
+              }`}
+            >
+              Phone Lookup
+            </button>
+            <button
+              type="button"
+              onClick={() => setLookupMode('qr')}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded ${
+                lookupMode === 'qr' ? 'bg-white shadow-sm text-who-blue' : 'text-ui-text-muted hover:text-ui-text'
+              }`}
+            >
+              Scan QR Card
+            </button>
           </div>
 
-                {lookupMode === 'phone' ? (
+          {lookupMode === 'phone' ? (
             <PatientSearch onFound={onPatientFound} />
           ) : (
             <QRScanner
@@ -225,139 +247,143 @@ export function VaccinationForm() {
           )}
 
           {!patient ? (
-            <p className="text-sm text-gray-600">
-              Patient not found.{' '}
-              <Link href="/health-worker/register" className="font-semibold text-teal-dark underline">
-                Register them first -&gt;
+            <p className="text-sm text-ui-text-light text-center py-4">
+              Patient not identified. Need a new record?{' '}
+              <Link href="/health-worker/register" className="text-who-blue font-bold hover:underline">
+                Register Patient
               </Link>
             </p>
           ) : (
-            <div className="rounded-lg bg-teal-50 p-3 text-sm text-teal-dark">
-              <p className="font-semibold">{patient.name}</p>
-              <p className="font-mono">{patient.healthDropId}</p>
-              <p>DOB: {new Date(patient.dateOfBirth).toLocaleDateString()}</p>
-              <p>Program: {patient.programId ?? 'No program'}</p>
+            <div className="rounded-lg border border-who-blue/20 bg-who-blue-light p-4 flex justify-between items-center">
+              <div>
+                <p className="font-bold text-who-blue text-lg leading-tight">{patient.name}</p>
+                <p className="font-mono text-xs text-who-blue/80 uppercase mt-1">{patient.healthDropId}</p>
+                <p className="text-xs text-ui-text-muted mt-2">
+                  Program: <span className="text-ui-text font-medium">{patient.programId ?? 'National Records Only'}</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="badge-blue bg-white border border-who-blue/30">Active Case</div>
+                <p className="text-[10px] text-ui-text-muted mt-2">DOB: {new Date(patient.dateOfBirth).toLocaleDateString()}</p>
+              </div>
             </div>
           )}
-        </CardContent>
+        </div>
       </Card>
 
-      {patient ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Vaccination History</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {patient && (
+        <>
+          <Card>
+            <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Local Immunization History</h3>
             <VaccinationTimeline records={history} />
-          </CardContent>
-        </Card>
-      ) : null}
+          </Card>
 
-      {patient ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Vaccination Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Vaccine name</label>
-                <Select
-                  options={VACCINES.map((value) => ({ value, label: value }))}
-                  value={watch('vaccineName')}
-                  onChange={(event) => {
-                    setValue('vaccineName', event.target.value, { shouldValidate: true });
-                    setValue('lotNumber', '');
-                    setManualLotEntry('');
-                    setManualLotMode(false);
-                  }}
-                />
-                {errors.vaccineName ? <p className="mt-1 text-sm text-red-600">{errors.vaccineName.message}</p> : null}
-              </div>
+          <Card>
+            <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">New Immunization Entry</h3>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-ui-text">Vaccine Managed</label>
+                  <select
+                    className="input"
+                    value={watch('vaccineName')}
+                    onChange={(event) => {
+                      setValue('vaccineName', event.target.value, { shouldValidate: true });
+                      setValue('lotNumber', '');
+                      setManualLotEntry('');
+                      setManualLotMode(false);
+                    }}
+                  >
+                    <option value="">Select vaccine...</option>
+                    {VACCINES.map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  {errors.vaccineName ? <p className="mt-1 text-xs text-who-red">{errors.vaccineName.message}</p> : null}
+                </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Lot number</label>
-                <Select
-                  value={manualLotMode ? '__manual__' : selectedLotNumber}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    if (nextValue === '__manual__') {
-                      setManualLotMode(true);
-                      setValue('lotNumber', manualLotEntry, { shouldValidate: true });
-                      return;
-                    }
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-ui-text">Batch / Lot Number</label>
+                  <select
+                    className="input"
+                    value={manualLotMode ? '__manual__' : selectedLotNumber}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      if (nextValue === '__manual__') {
+                        setManualLotMode(true);
+                        setValue('lotNumber', manualLotEntry, { shouldValidate: true });
+                        return;
+                      }
+                      setManualLotMode(false);
+                      setManualLotEntry('');
+                      setValue('lotNumber', nextValue, { shouldValidate: true });
+                    }}
+                  >
+                    <option value="">Select lot...</option>
+                    {lotsForSelectedVaccine.map((lot) => (
+                      <option key={lot.lotNumber} value={lot.lotNumber}>
+                        {lot.lotNumber} ({lot.dosesRegistered - lot.dosesUsed} left)
+                      </option>
+                    ))}
+                    <option value="__manual__">Enter lot manually...</option>
+                  </select>
 
-                    setManualLotMode(false);
-                    setManualLotEntry('');
-                    setValue('lotNumber', nextValue, { shouldValidate: true });
-                  }}
-                  placeholder="Select lot number"
-                  options={[
-                    ...lotsForSelectedVaccine.map((lot) => ({
-                      value: lot.lotNumber,
-                      label: `${lot.lotNumber} (${lot.dosesRegistered - lot.dosesUsed} left)`,
-                    })),
-                    { value: '__manual__', label: 'Enter lot manually' },
-                  ]}
-                />
-
-                {manualLotMode ? (
-                  <div className="mt-2">
-                    <Input
+                  {manualLotMode && (
+                    <input
+                      className="input mt-2"
                       value={manualLotEntry}
                       onChange={(event) => {
                         setManualLotEntry(event.target.value);
                         setValue('lotNumber', event.target.value, { shouldValidate: true });
                       }}
-                      placeholder="Manual lot entry"
+                      placeholder="Enter verification code"
                     />
-                  </div>
-                ) : null}
+                  )}
 
-                {lotIsValid ? (
-                  <p className="mt-2 text-xs text-green-700">Valid lot - {remainingDoses} doses remaining</p>
-                ) : null}
-                {lowStock ? (
-                  <div className="mt-2">
-                    <Badge variant="warning">Low stock</Badge>
-                  </div>
-                ) : null}
-                {lotIsUnknown ? <p className="mt-2 text-xs text-red-600">Lot not in registry</p> : null}
-                {lotVaccineMismatch ? (
-                  <p className="mt-2 text-xs text-red-600">Lot does not match the selected vaccine</p>
-                ) : null}
-                {errors.lotNumber ? <p className="mt-1 text-sm text-red-600">{errors.lotNumber.message}</p> : null}
+                  {lotIsValid && (
+                    <p className="mt-2 text-xs text-who-green font-medium">Verified lot: {remainingDoses} doses local stock</p>
+                  )}
+                  {lowStock && <div className="mt-1 badge-orange">Low stock warning</div>}
+                  {lotIsUnknown && <p className="mt-2 text-xs text-who-red font-medium">Batch not recognized locally</p>}
+                  {lotVaccineMismatch && <p className="mt-2 text-xs text-who-red font-medium">Batch mismatch with vaccine type</p>}
+                  {errors.lotNumber ? <p className="mt-1 text-xs text-who-red">{errors.lotNumber.message}</p> : null}
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-ui-text">Dose Number</label>
+                  <input type="number" min={1} max={5} {...register('doseNumber')} className="input" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-ui-text">Date of Administration</label>
+                  <input type="date" {...register('dateAdministered')} className="input" />
+                  {errors.dateAdministered ? <p className="mt-1 text-xs text-who-red">{errors.dateAdministered.message}</p> : null}
+                </div>
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Dose number</label>
-                <Input type="number" min={1} max={5} {...register('doseNumber')} />
+                <label className="mb-1.5 block text-sm font-medium text-ui-text">Clinical Notes (Internal Only)</label>
+                <textarea
+                  {...register('notes')}
+                  className="input min-h-[80px]"
+                  placeholder="Additional context about injection site, patient reaction, etc."
+                />
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Date administered</label>
-                <Input type="date" {...register('dateAdministered')} />
-                {errors.dateAdministered ? (
-                  <p className="mt-1 text-sm text-red-600">{errors.dateAdministered.message}</p>
-                ) : null}
+              <div className="p-3 bg-ui-bg rounded border border-ui-border flex items-center justify-between text-xs text-ui-text-muted">
+                <span>Security Check: GPS Confirmed</span>
+                <span className="font-mono text-ui-text">[{gps.lat.toFixed(4)}, {gps.lng.toFixed(4)}]</span>
               </div>
 
-              <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
-                Clinic: [{gps.lat.toFixed(4)}, {gps.lng.toFixed(4)}]
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Notes (optional)</label>
-                <Input {...register('notes')} placeholder="Any additional context" />
-              </div>
-
-              <Button type="submit" className="w-full" loading={isSubmitting}>
-                Record Vaccination
+              <Button type="submit" variant="primary" className="w-full h-12" loading={isSubmitting}>
+                Record & Issue Verified Document
               </Button>
             </form>
-          </CardContent>
-        </Card>
-      ) : null}
+          </Card>
+        </>
+      )}
     </div>
   );
 }
+
+
+

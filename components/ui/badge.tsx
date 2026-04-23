@@ -1,4 +1,4 @@
-﻿import { cn } from '@/lib/utils/cn';
+import { cn } from '@/lib/utils/cn';
 
 interface BadgeProps {
   variant?: 'synced' | 'pending' | 'flagged' | 'offline' | 'active' | 'simulated' | 'success' | 'warning' | 'error';
@@ -25,4 +25,7 @@ export function Badge({ variant = 'active', children, className }: BadgeProps) {
     </span>
   );
 }
+
+
+
 

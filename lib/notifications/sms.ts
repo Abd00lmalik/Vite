@@ -1,6 +1,7 @@
-﻿import { db } from '@/lib/db/schema';
+import { db } from '@/lib/db/schema';
 import { v4 as uuidv4 } from 'uuid';
 import type { SMSLog } from '@/types';
+import { sendSMSAction } from './actions';
 
 const SMS_TEMPLATES = {
   registration: (childName: string, programName: string, healthId: string, amount: number) =>
@@ -20,25 +21,24 @@ const SMS_TEMPLATES = {
 };
 
 export async function sendSMS(to: string, message: string, type: SMSLog['type']): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  // 1. Call real Twilio Server Action
+  const result = await sendSMSAction(to, message);
 
+  // 2. Log to local IndexedDB for patient history
   const log: SMSLog = {
     id: uuidv4(),
     to,
     type,
     message,
-    status: 'simulated',
+    status: result.success ? 'sent' : 'failed',
     timestamp: new Date().toISOString(),
   };
 
   await db.smsLogs.put(log);
 
-  // In Phase 2 - replace with:
-  // const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-  // await client.messages.create({ body: message, from: process.env.TWILIO_PHONE_NUMBER, to });
-
-  // eslint-disable-next-line no-console
-  console.log(`[VITE SMS SIMULATED] -> ${to}: ${message}`);
+  if (!result.success) {
+    throw new Error(`SMS delivery failed: ${result.error}`);
+  }
 }
 
 export const SMS = {
@@ -57,4 +57,7 @@ export const SMS = {
   redemption: (to: string, amount: number, phone: string) =>
     sendSMS(to, SMS_TEMPLATES.redemption(amount, phone), 'milestone-payment'),
 };
+
+
+
 

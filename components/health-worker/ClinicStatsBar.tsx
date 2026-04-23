@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -49,4 +49,7 @@ export function ClinicStatsBar({ clinicId }: ClinicStatsBarProps) {
     </div>
   );
 }
+
+
+
 

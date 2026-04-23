@@ -14,12 +14,15 @@ export default function HealthWorkerRegisterPage() {
   if (!mounted) return <PageSkeleton />;
 
   return (
-    <main className="min-h-screen bg-gray-50 pb-24">
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-4 md:px-8">
+    <main className="min-h-screen bg-ui-bg pb-24 font-sans">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">Register Patient</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-ui-text">Register New Patient</h1>
+            <p className="text-sm text-ui-text-muted mt-1">Enroll a family into the Vite protocol</p>
+          </div>
           <Link href="/health-worker">
-            <Button variant="outline">Back</Button>
+            <Button variant="outline" size="sm">Back to Dashboard</Button>
           </Link>
         </div>
         <PatientForm />
@@ -27,3 +30,6 @@ export default function HealthWorkerRegisterPage() {
     </main>
   );
 }
+
+
+

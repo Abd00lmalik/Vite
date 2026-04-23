@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { cn } from '@/lib/utils/cn';
 
@@ -33,4 +33,7 @@ export function Tabs({ items, value, onChange, className }: TabsProps) {
     </div>
   );
 }
+
+
+
 

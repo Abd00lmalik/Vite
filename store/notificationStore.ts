@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 
 interface NotificationState {
   unreadCount: number;
@@ -12,4 +12,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     set((state) => (state.unreadCount === count ? state : { unreadCount: count }));
   },
 }));
+
+
+
 

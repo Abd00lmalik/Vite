@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import type { SyncResult } from '@/types';
 
 interface SyncState {
@@ -30,4 +30,7 @@ export const useSyncStore = create<SyncState>((set) => ({
   incrementRetry: () => set((state) => ({ retryCount: state.retryCount + 1 })),
   resetRetry: () => set({ retryCount: 0 }),
 }));
+
+
+
 

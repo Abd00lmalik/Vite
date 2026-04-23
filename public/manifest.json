@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "VITE Health",
   "short_name": "VITE",
   "description": "Every dose recorded. Every record trusted. Every grant verified.",
@@ -25,4 +25,5 @@
     }
   ]
 }
+
 

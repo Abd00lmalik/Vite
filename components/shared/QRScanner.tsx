@@ -114,3 +114,6 @@ export function QRScanner({ onScan, onManualPhoneLookup }: QRScannerProps) {
     </div>
   );
 }
+
+
+

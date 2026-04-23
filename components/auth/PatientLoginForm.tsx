@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -6,7 +6,6 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/authStore';
 import { loginWithPhone } from '@/lib/auth/session';
@@ -43,21 +42,29 @@ export function PatientLoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Phone number</label>
-        <Input {...register('phone')} placeholder="+2348012345678" />
-        {errors.phone ? <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p> : null}
+        <label className="mb-1.5 block text-sm font-semibold text-ui-text">
+          Registered Phone Number
+        </label>
+        <input 
+          {...register('phone')} 
+          placeholder="+2348012345678" 
+          className="input"
+        />
+        {errors.phone ? (
+          <p className="mt-1.5 text-xs font-medium text-who-red">{errors.phone.message}</p>
+        ) : null}
       </div>
 
-      <Button type="submit" className="w-full" loading={isSubmitting}>
-        Find my record
+      <Button type="submit" variant="primary" className="w-full" loading={isSubmitting}>
+        Find Record & Access Wallet
       </Button>
 
-      <p className="text-sm text-gray-600">
-        No account found?{' '}
-        <Link href="/auth/signup" className="font-semibold text-teal-dark underline">
-          Register here \u2192
+      <p className="text-center text-sm text-ui-text-light">
+        Don't have a record?{' '}
+        <Link href="/auth/signup?role=patient" className="font-bold text-who-blue hover:underline">
+          Register Patient
         </Link>
       </p>
     </form>

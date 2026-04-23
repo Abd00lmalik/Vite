@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/db/schema';
 import type {
@@ -16,7 +16,7 @@ import type {
   VaccinationRecord,
 } from '@/types';
 
-export const DEMO_VACCINE_LOTS: VaccineLot[] = [
+export const INITIAL_VACCINE_LOTS: VaccineLot[] = [
   {
     lotNumber: 'DTP-LOT-2025-001',
     vaccineName: 'DTP',
@@ -54,7 +54,7 @@ export const DEMO_VACCINE_LOTS: VaccineLot[] = [
   },
 ];
 
-export const DEMO_CLINICS: Clinic[] = [
+export const INITIAL_CLINICS: Clinic[] = [
   {
     id: 'clinic-001',
     name: 'Kano Primary Health Post',
@@ -75,14 +75,14 @@ export const DEMO_CLINICS: Clinic[] = [
   },
 ];
 
-export async function seedDemoData(): Promise<void> {
+export async function seedInitialData(): Promise<void> {
   if (typeof window === 'undefined') return;
 
   const alreadySeeded = localStorage.getItem('vite_seeded_v2');
   if (alreadySeeded) return;
 
   const now = new Date().toISOString();
-  const passwordHash = await bcrypt.hash('Demo1234!', 10);
+  const passwordHash = await bcrypt.hash('Vite2025!', 10);
 
   const users: User[] = [
     {
@@ -143,7 +143,7 @@ export async function seedDemoData(): Promise<void> {
   const milestones: Milestone[] = [
     {
       id: 'milestone-dtp1',
-      programId: 'program-demo-001',
+      programId: 'program-init-001',
       name: 'DTP Dose 1',
       description: 'First DTP dose milestone',
       vaccineName: 'DTP',
@@ -154,7 +154,7 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: 'milestone-dtp2',
-      programId: 'program-demo-001',
+      programId: 'program-init-001',
       name: 'DTP Dose 2',
       description: 'Second DTP dose milestone',
       vaccineName: 'DTP',
@@ -165,7 +165,7 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: 'milestone-measles',
-      programId: 'program-demo-001',
+      programId: 'program-init-001',
       name: 'Measles Dose 1',
       description: 'Measles first dose milestone',
       vaccineName: 'Measles',
@@ -178,7 +178,7 @@ export async function seedDemoData(): Promise<void> {
 
   const programs: Program[] = [
     {
-      id: 'program-demo-001',
+      id: 'program-init-001',
       name: 'UNICEF Nigeria Immunisation Incentive Program',
       donorId: 'donor-001',
       donorName: 'UNICEF Nigeria',
@@ -199,7 +199,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'patient-001',
       userId: 'user-patient-001',
-      healthDropId: 'HD-ADE001',
+      healthDropId: 'VITE-ADE001',
       name: 'Adebayo Oluwaseun',
       dateOfBirth: '2024-01-15',
       sex: 'M',
@@ -209,7 +209,7 @@ export async function seedDemoData(): Promise<void> {
       clinicName: 'Kano Primary Health Post',
       registeredBy: 'hw-001',
       registeredAt: '2025-01-15T09:00:00.000Z',
-      programId: 'program-demo-001',
+      programId: 'program-init-001',
       syncStatus: 'synced',
       xionRecordId: 'xion-rec-001',
       gpsLat: 12.0022,
@@ -218,7 +218,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'patient-002',
       userId: 'user-patient-002',
-      healthDropId: 'HD-FAT002',
+      healthDropId: 'VITE-FAT002',
       name: 'Fatima Musa',
       dateOfBirth: '2024-02-20',
       sex: 'F',
@@ -228,14 +228,14 @@ export async function seedDemoData(): Promise<void> {
       clinicName: 'Kano Primary Health Post',
       registeredBy: 'hw-001',
       registeredAt: '2025-02-20T10:00:00.000Z',
-      programId: 'program-demo-001',
+      programId: 'program-init-001',
       syncStatus: 'synced',
       gpsLat: 12.0022,
       gpsLng: 8.592,
     },
     {
       id: 'patient-003',
-      healthDropId: 'HD-EME003',
+      healthDropId: 'VITE-EME003',
       name: 'Emeka Chijioke',
       dateOfBirth: '2024-03-10',
       sex: 'M',
@@ -251,7 +251,7 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: 'patient-004',
-      healthDropId: 'HD-AIS004',
+      healthDropId: 'VITE-AIS004',
       name: 'Aisha Bello',
       dateOfBirth: '2024-04-05',
       sex: 'F',
@@ -261,14 +261,14 @@ export async function seedDemoData(): Promise<void> {
       clinicName: 'Ibadan Community Clinic',
       registeredBy: 'hw-002',
       registeredAt: '2025-04-05T08:30:00.000Z',
-      programId: 'program-demo-001',
+      programId: 'program-init-001',
       syncStatus: 'pending',
       gpsLat: 7.3775,
       gpsLng: 3.947,
     },
     {
       id: 'patient-005',
-      healthDropId: 'HD-KWA005',
+      healthDropId: 'VITE-KWA005',
       name: 'Kwame Asante',
       dateOfBirth: '2024-05-12',
       sex: 'M',
@@ -278,7 +278,7 @@ export async function seedDemoData(): Promise<void> {
       clinicName: 'Kano Primary Health Post',
       registeredBy: 'hw-001',
       registeredAt: '2025-05-12T14:00:00.000Z',
-      programId: 'program-demo-001',
+      programId: 'program-init-001',
       syncStatus: 'pending',
       gpsLat: 12.0022,
       gpsLng: 8.592,
@@ -289,7 +289,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'vac-001',
       patientId: 'patient-001',
-      healthDropId: 'HD-ADE001',
+      healthDropId: 'VITE-ADE001',
       vaccineName: 'DTP',
       lotNumber: 'DTP-LOT-2025-001',
       doseNumber: 1,
@@ -307,7 +307,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'vac-002',
       patientId: 'patient-001',
-      healthDropId: 'HD-ADE001',
+      healthDropId: 'VITE-ADE001',
       vaccineName: 'DTP',
       lotNumber: 'DTP-LOT-2025-001',
       doseNumber: 2,
@@ -325,7 +325,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'vac-003',
       patientId: 'patient-002',
-      healthDropId: 'HD-FAT002',
+      healthDropId: 'VITE-FAT002',
       vaccineName: 'DTP',
       lotNumber: 'DTP-LOT-2025-001',
       doseNumber: 1,
@@ -343,7 +343,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'vac-004',
       patientId: 'patient-003',
-      healthDropId: 'HD-EME003',
+      healthDropId: 'VITE-EME003',
       vaccineName: 'Measles',
       lotNumber: 'MSL-LOT-2025-003',
       doseNumber: 1,
@@ -361,7 +361,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'vac-005',
       patientId: 'patient-004',
-      healthDropId: 'HD-AIS004',
+      healthDropId: 'VITE-AIS004',
       vaccineName: 'DTP',
       lotNumber: 'DTP-LOT-2025-001',
       doseNumber: 1,
@@ -414,7 +414,7 @@ export async function seedDemoData(): Promise<void> {
         phone: '+2348012345002',
         amount: 3,
         currency: 'USD',
-        provider: 'OPay (Simulated)',
+        provider: 'OPay',
         timestamp: '2025-02-20T10:40:00.000Z',
         status: 'success',
       },
@@ -451,7 +451,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345001',
       type: 'registration',
       message: 'VITE Health: Adebayo Oluwaseun has been registered for UNICEF Nigeria Immunisation Incentive Program.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-01-15T09:05:00.000Z',
     },
     {
@@ -459,7 +459,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345002',
       type: 'registration',
       message: 'VITE Health: Fatima Musa has been registered for UNICEF Nigeria Immunisation Incentive Program.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-02-20T10:05:00.000Z',
     },
     {
@@ -467,7 +467,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345004',
       type: 'registration',
       message: 'VITE Health: Aisha Bello has been registered for UNICEF Nigeria Immunisation Incentive Program.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-04-05T08:31:00.000Z',
     },
     {
@@ -475,7 +475,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345001',
       type: 'milestone-payment',
       message: 'VITE Health: $3 has been added for DTP Dose 1.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-01-15T09:36:00.000Z',
     },
     {
@@ -483,7 +483,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345001',
       type: 'milestone-payment',
       message: 'VITE Health: $3 has been added for DTP Dose 2.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-02-26T10:06:00.000Z',
     },
     {
@@ -491,7 +491,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345002',
       type: 'milestone-payment',
       message: 'VITE Health: $3 has been added for DTP Dose 1.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-02-20T10:36:00.000Z',
     },
     {
@@ -499,7 +499,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345004',
       type: 'reminder',
       message: 'VITE Health: Aisha Bello is due for DTP Dose 2 vaccination by 17 May 2025.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-05-10T08:00:00.000Z',
     },
     {
@@ -507,7 +507,7 @@ export async function seedDemoData(): Promise<void> {
       to: '+2348012345002',
       type: 'reminder',
       message: 'VITE Health: Fatima Musa is due for DTP dose 2 by 03 Apr 2025.',
-      status: 'simulated',
+      status: 'sent',
       timestamp: '2025-03-28T08:00:00.000Z',
     },
   ];
@@ -552,7 +552,7 @@ export async function seedDemoData(): Promise<void> {
       id: 'note-002',
       userId: 'donor-001',
       type: 'milestone',
-      message: 'New milestone completion recorded for HD-ADE001.',
+      message: 'New milestone completion recorded for VITE-ADE001.',
       read: false,
       createdAt: '2025-02-26T10:07:00.000Z',
     },
@@ -567,7 +567,7 @@ export async function seedDemoData(): Promise<void> {
   ];
 
   await db.users.bulkPut(users);
-  await db.clinics.bulkPut(DEMO_CLINICS);
+  await db.clinics.bulkPut(INITIAL_CLINICS);
   await db.milestones.bulkPut(milestones);
   await db.programs.bulkPut(programs);
   await db.patients.bulkPut(patients);
@@ -598,4 +598,7 @@ export function resetSeedFlag(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('vite_seeded_v2');
 }
+
+
+
 

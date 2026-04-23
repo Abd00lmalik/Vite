@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
@@ -199,7 +199,7 @@ function HealthWorkersTab() {
     },
     {
       title: 'Register a patient in about 60 seconds',
-      body: 'Enter child name, date of birth, sex, and parent phone. VITE assigns a unique Health ID such as HD-ADE001 and generates a QR sticker.',
+      body: 'Enter child name, date of birth, sex, and parent phone. VITE assigns a unique Health ID such as VITE-ADE001 and generates a QR sticker.',
       icon: Users,
     },
     {
@@ -501,3 +501,6 @@ function SecurityTab() {
     </div>
   );
 }
+
+
+

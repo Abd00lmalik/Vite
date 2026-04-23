@@ -1,6 +1,7 @@
-﻿'use client';
+'use client';
 
-import Link from 'next/link';
+import Link from 'next/image';
+import NextLink from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -8,7 +9,6 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import toast from 'react-hot-toast';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/authStore';
 import { loginWithEmail } from '@/lib/auth/session';
@@ -65,40 +65,55 @@ export function StaffLoginForm({ role }: StaffLoginFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-        <Input {...register('email')} type="email" placeholder="name@org.org" />
-        {errors.email ? <p className="mt-1 text-sm text-red-600">{errors.email.message}</p> : null}
+        <label className="mb-1.5 block text-sm font-semibold text-ui-text">Email Address</label>
+        <input 
+          {...register('email')} 
+          type="email" 
+          placeholder="name@organization.org" 
+          className="input"
+        />
+        {errors.email ? (
+          <p className="mt-1.5 text-xs font-medium text-who-red">{errors.email.message}</p>
+        ) : null}
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
+        <label className="mb-1.5 block text-sm font-semibold text-ui-text">Password</label>
         <div className="relative">
-          <Input {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="Enter password" />
+          <input 
+            {...register('password')} 
+            type={showPassword ? 'text' : 'password'} 
+            placeholder="Enter your password" 
+            className="input pr-10"
+          />
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ui-text-muted hover:text-who-blue transition-colors"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-        {errors.password ? <p className="mt-1 text-sm text-red-600">{errors.password.message}</p> : null}
+        {errors.password ? (
+          <p className="mt-1.5 text-xs font-medium text-who-red">{errors.password.message}</p>
+        ) : null}
       </div>
 
-      <Button type="submit" className="w-full" loading={isSubmitting}>
-        Sign In
+      <Button type="submit" variant="primary" className="w-full" loading={isSubmitting}>
+        Authorize Access
       </Button>
 
-      <p className="text-sm text-gray-600">
+      <p className="text-center text-sm text-ui-text-light">
         Need an account?{' '}
-        <Link href="/auth/signup" className="font-semibold text-teal-dark underline">
-          Sign up
-        </Link>
+        <NextLink href={`/auth/signup?role=${role}`} className="font-bold text-who-blue hover:underline">
+          Register Staff
+        </NextLink>
       </p>
     </form>
   );
 }
+
 
 

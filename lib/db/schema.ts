@@ -1,4 +1,4 @@
-﻿import Dexie, { Table } from 'dexie';
+import Dexie, { Table } from 'dexie';
 import type {
   AuditLog,
   Clinic,
@@ -33,8 +33,8 @@ export class ViteDatabase extends Dexie {
   constructor() {
     super('ViteHealthDrop');
 
-    // VERSION 3 — clean slate with correct primary keys and indexes
-    // Primary keys use 'id' throughout — never '++id'
+    // VERSION 3 â€” clean slate with correct primary keys and indexes
+    // Primary keys use 'id' throughout â€” never '++id'
     this.version(3).stores({
       patients:
         'id, healthDropId, parentPhone, clinicId, syncStatus, programId, registeredAt, registeredBy',
@@ -68,4 +68,7 @@ export const db = new Proxy({} as ViteDatabase, {
     return (getDb() as any)[prop];
   },
 });
+
+
+
 

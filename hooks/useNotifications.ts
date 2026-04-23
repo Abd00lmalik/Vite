@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/schema';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -54,4 +54,7 @@ export function useNotifications() {
     markOneRead,
   };
 }
+
+
+
 

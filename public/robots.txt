@@ -1,0 +1,6 @@
+# VITE Health Protocol Robots.txt
+User-agent: *
+Allow: /
+
+# Expose sitemap
+Sitemap: https://vite.health/sitemap.xml

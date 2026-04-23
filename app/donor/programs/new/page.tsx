@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,5 +28,8 @@ export default function NewProgramPage() {
     </main>
   );
 }
+
+
+
 
 

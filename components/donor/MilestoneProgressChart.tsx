@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { Program } from '@/types';
@@ -23,6 +23,7 @@ export function MilestoneProgressChart({ program }: MilestoneProgressChartProps)
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
+          {/* @ts-ignore */}
           <XAxis dataKey="stage" />
           <YAxis />
           <Tooltip />
@@ -34,4 +35,7 @@ export function MilestoneProgressChart({ program }: MilestoneProgressChartProps)
     </div>
   );
 }
+
+
+
 

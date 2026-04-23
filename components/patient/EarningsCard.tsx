@@ -1,4 +1,4 @@
-﻿import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface EarningsCardProps {
@@ -27,5 +27,8 @@ export function EarningsCard({ totalEarned, available, redeemed, onRedeem }: Ear
     </Card>
   );
 }
+
+
+
 
 

@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/db/schema';
 import type { AuthSession, User, UserRole } from '@/types';
@@ -90,4 +90,7 @@ export function isSessionExpired(session: AuthSession | null): boolean {
   if (!session) return true;
   return new Date(session.expiresAt).getTime() <= Date.now();
 }
+
+
+
 

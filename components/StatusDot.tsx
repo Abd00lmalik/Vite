@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { cn } from '@/lib/utils';
 
@@ -32,4 +32,7 @@ export function StatusDot({ status, className, showLabel = false }: StatusDotPro
     </span>
   );
 }
+
+
+
 

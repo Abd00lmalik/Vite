@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { WifiOff } from 'lucide-react';
 
@@ -10,4 +10,7 @@ export function OfflineBanner() {
     </div>
   );
 }
+
+
+
 

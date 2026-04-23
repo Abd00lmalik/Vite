@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { Search } from 'lucide-react';
@@ -34,5 +34,8 @@ export function PatientSearch({ onFound }: PatientSearchProps) {
     </div>
   );
 }
+
+
+
 
 

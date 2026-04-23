@@ -1,4 +1,4 @@
-﻿import type { UserRole } from '@/types';
+import type { UserRole } from '@/types';
 
 export const roleHome: Record<UserRole, string> = {
   patient: '/patient',
@@ -10,4 +10,7 @@ export const roleHome: Record<UserRole, string> = {
 export function canAccessRole(requiredRole: UserRole, currentRole?: UserRole): boolean {
   return currentRole === requiredRole;
 }
+
+
+
 

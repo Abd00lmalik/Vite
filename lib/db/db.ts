@@ -1,4 +1,4 @@
-﻿import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 import { db } from './schema';
 import type {
   AuditLog,
@@ -17,7 +17,7 @@ import type {
 
 function buildHealthId(seed: string): string {
   const entropy = `${seed.replace(/-/g, '')}${uuidv4().replace(/-/g, '')}`;
-  return `HD-${entropy.slice(-6).toUpperCase()}`;
+  return `VITE-${entropy.slice(-6).toUpperCase()}`;
 }
 
 export async function createUser(user: User): Promise<void> {
@@ -60,7 +60,7 @@ export async function getPatientByPhone(phone: string): Promise<Patient | undefi
   return db.patients.where('parentPhone').equals(phone).first();
 }
 
-export async function getPatientByHealthDropId(healthDropId: string): Promise<Patient | undefined> {
+export async function getPatientByhealthDropId(healthDropId: string): Promise<Patient | undefined> {
   return db.patients.where('healthDropId').equals(healthDropId).first();
 }
 
@@ -170,4 +170,7 @@ export async function addSMSLog(log: SMSLog): Promise<void> {
 export async function addAuditLog(log: AuditLog): Promise<void> {
   await db.auditLogs.put(log);
 }
+
+
+
 

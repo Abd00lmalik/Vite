@@ -1,15 +1,17 @@
-﻿import * as React from 'react';
+import * as React from 'react';
 import { cn } from '@/lib/utils/cn';
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       className={cn(
-        'h-12 w-full rounded-lg border border-gray-300 px-3 text-base text-gray-900 outline-none transition focus:border-teal-primary focus:ring-2 focus:ring-teal-100',
+        'w-full border border-ui-border rounded px-4 py-2.5 text-sm text-ui-text bg-white focus:outline-none focus:ring-2 focus:ring-who-blue focus:border-who-blue transition-colors',
         className
       )}
       {...props}
     />
   );
 }
+
+
 

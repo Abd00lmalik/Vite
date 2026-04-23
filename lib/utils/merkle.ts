@@ -53,3 +53,6 @@ export function getProofForRecord(
 
   return tree.getProof(toBuffer(leafHex)).map((entry) => `0x${entry.data.toString('hex')}`);
 }
+
+
+

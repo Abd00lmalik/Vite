@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 
@@ -24,4 +24,7 @@ export function useOfflineStatus() {
 
   return mounted ? isOnline : true;
 }
+
+
+
 

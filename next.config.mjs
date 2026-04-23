@@ -4,6 +4,7 @@ const withPWA = withPWAInit({
   dest: 'public',
   register: true,
   skipWaiting: true,
+  // PWA is intentionally disabled in development to improve build speeds and avoid service worker caching issues.
   disable: process.env.NODE_ENV === 'development',
 });
 
@@ -12,6 +13,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  transpilePackages: ['recharts'],
 };
 
 export default withPWA(nextConfig);

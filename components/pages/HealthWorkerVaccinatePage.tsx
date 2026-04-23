@@ -14,12 +14,15 @@ export default function HealthWorkerVaccinatePage() {
   if (!mounted) return <PageSkeleton />;
 
   return (
-    <main className="min-h-screen bg-gray-50 pb-24">
-      <div className="mx-auto max-w-4xl space-y-4 px-4 py-4 md:px-8">
+    <main className="min-h-screen bg-ui-bg pb-24 font-sans">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">Record Vaccination</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-ui-text">Record Vaccination</h1>
+            <p className="text-sm text-ui-text-muted mt-1">Submit immunization data for verification on XION</p>
+          </div>
           <Link href="/health-worker">
-            <Button variant="outline">Back</Button>
+            <Button variant="outline" size="sm">Back to Dashboard</Button>
           </Link>
         </div>
         <VaccinationForm />
@@ -27,3 +30,6 @@ export default function HealthWorkerVaccinatePage() {
     </main>
   );
 }
+
+
+

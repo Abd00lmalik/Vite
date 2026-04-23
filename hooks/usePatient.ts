@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -55,4 +55,7 @@ export function usePatient() {
     reset: () => setQuery(''),
   };
 }
+
+
+
 

@@ -1,23 +1,27 @@
-﻿'use client';
+'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
-import { CircleHelp, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
-import { Button } from '@/components/ui/button';
-import { Tabs } from '@/components/ui/tabs';
-import { StatCard } from '@/components/ui/StatCard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useXion } from '@/hooks/useXion';
+import { useAbstraxionClient } from '@burnt-labs/abstraxion';
+import { queryProgramBalance } from '@/lib/xion/contracts';
 import { NotificationBell } from '@/components/shared/NotificationBell';
+import { XionConnectButton } from '@/components/shared/XionConnectButton';
+import { Card, StatCard } from '@/components/ui/card';
+import dynamic from 'next/dynamic';
 import { ProgramCard } from './ProgramCard';
-import { MilestoneProgressChart } from './MilestoneProgressChart';
+const MilestoneProgressChart = dynamic(
+  () => import('./MilestoneProgressChart').then((mod) => mod.MilestoneProgressChart),
+  { ssr: false }
+);
 import { FundingMetricsGrid } from './FundingMetricsGrid';
 import { CoverageHeatmap } from './CoverageHeatmap';
 import { TransactionTable } from './TransactionTable';
@@ -29,292 +33,308 @@ import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { shortTxHash } from '@/lib/utils/format';
 import type { Program } from '@/types';
 
+const TABS = [
+  { id: 'overview',      label: 'Overview' },
+  { id: 'programs',      label: 'Programs' },
+  { id: 'transactions',  label: 'Transactions' },
+  { id: 'disputes',      label: 'Disputes' },
+  { id: 'reports',       label: 'Reports' },
+  { id: 'sms',           label: 'SMS Log' },
+];
+
 export function DonorDashboard() {
-  const mounted = useMounted();
+  const mounted     = useMounted();
   const { session } = useAuth('donor');
-  const logout = useAuthStore((state) => state.logout);
-  const router = useRouter();
-  const [tab, setTab] = useState('overview');
+  const logout      = useAuthStore((s) => s.logout);
+  const router      = useRouter();
+  const { address, isConnected } = useXion();
+  const { client: queryClient } = useAbstraxionClient();
+  
+  const [tab, setTab]                   = useState('overview');
   const [fundingProgram, setFundingProgram] = useState<Program | null>(null);
 
-  const programs = useLiveQuery(() => db.programs.toArray(), []) ?? [];
-  const grants = useLiveQuery(() => db.grantReleases.toArray(), []);
-  const disputes = useLiveQuery(() => db.disputes.toArray(), []);
-  const smsLogs = useLiveQuery(() => db.smsLogs.reverse().sortBy('timestamp'), []);
-  const auditLogs = useLiveQuery(() => db.auditLogs.reverse().sortBy('timestamp'), []);
+  const programs    = useLiveQuery(() => db.programs.toArray(), []) ?? [];
+  const grants      = useLiveQuery(() => db.grantReleases.toArray(), []);
+  const disputes    = useLiveQuery(() => db.disputes.toArray(), []);
+  const smsLogs     = useLiveQuery(() => db.smsLogs.reverse().sortBy('timestamp'), []);
+  const auditLogs   = useLiveQuery(() => db.auditLogs.reverse().sortBy('timestamp'), []);
   const syncBatches = useLiveQuery(() => db.syncBatches.reverse().sortBy('submittedAt'), []);
-  const patients = useLiveQuery(() => db.patients.toArray(), []);
-  const totalEscrow = useLiveQuery(
-    () => db.programs.toArray().then((items) => items.reduce((sum, item) => sum + (item.escrowBalance ?? 0), 0)),
-    []
-  ) ?? 0;
-  const totalReleased = useLiveQuery(
-    () => db.programs.toArray().then((items) => items.reduce((sum, item) => sum + (item.totalReleased ?? 0), 0)),
-    []
-  ) ?? 0;
+  const patients    = useLiveQuery(() => db.patients.toArray(), []);
+  
+  const totalEscrow = useMemo(() => programs.reduce((sum, p) => sum + (p.escrowBalance ?? 0), 0), [programs]);
+  const totalReleased = useMemo(() => programs.reduce((sum, p) => sum + (p.totalReleased ?? 0), 0), [programs]);
 
-  const metrics = useMemo(() => {
-    const enrolled = patients?.length ?? 0;
-    const milestonesComplete = (programs ?? []).reduce(
-      (sum, program) => sum + program.milestones.reduce((acc, item) => acc + item.completedCount, 0),
-      0
-    );
-
-    return {
-      enrolled,
-      milestonesComplete,
-      fundsReleased: totalReleased,
-      escrowBalance: totalEscrow,
-    };
-  }, [patients, programs, totalEscrow, totalReleased]);
-
+  // Real XION sync for balances
   useEffect(() => {
-    if (!mounted) return;
-    const timer = window.setTimeout(async () => {
-      const count = await db.programs.count();
-      if (count === 0) {
-        console.warn('[VITE] No programs in DB — check seed. Clearing seed guard and reseeding.');
-        localStorage.removeItem('vite_seeded_v2');
-        window.location.reload();
+    if (!isConnected || !queryClient || programs.length === 0) return;
+    
+    const syncBalances = async () => {
+      for (const p of programs) {
+        try {
+          const bal = await queryProgramBalance(queryClient, p.id);
+          const xionAmount = parseInt(bal) / 1_000_000;
+          if (xionAmount !== p.escrowBalance) {
+            await db.programs.update(p.id, { escrowBalance: xionAmount });
+          }
+        } catch (e) {
+          // Silent failure for balance sync is acceptable during poll
+        }
       }
-    }, 2000);
-
-    return () => {
-      window.clearTimeout(timer);
     };
-  }, [mounted]);
+    
+    syncBalances();
+  }, [isConnected, queryClient, programs.length]);
 
-  if (!mounted || !session) {
-    return <PageSkeleton />;
-  }
+  const metrics = useMemo(() => ({
+    enrolled:          patients?.length ?? 0,
+    milestonesComplete: (programs ?? []).reduce(
+      (sum, p) => sum + p.milestones.reduce((a, m) => a + m.completedCount, 0), 0
+    ),
+    fundsReleased:  totalReleased,
+    escrowBalance:  totalEscrow,
+  }), [patients, programs, totalEscrow, totalReleased]);
+
+  if (!mounted || !session) return <PageSkeleton />;
 
   const firstProgram = programs[0];
 
   return (
-    <main className="min-h-screen bg-gray-50 pb-24">
-      <header className="border-b border-gray-200 bg-white px-4 py-3 md:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="VITE logo" width={38} height={38} className="rounded-md" />
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{session.organizationName ?? session.name}</p>
-              <p className="text-xs text-gray-600">Donor Dashboard</p>
-            </div>
-          </div>
+    <main className="min-h-screen bg-ui-bg pb-24 font-sans">
 
-          <div className="flex items-center gap-2">
-            <Link href="/how-it-works">
-              <Button variant="outline" className="h-10 px-3">
-                <CircleHelp className="mr-1 h-4 w-4" />
-                Guide
-              </Button>
-            </Link>
-            <NotificationBell />
-            <Button
-              variant="outline"
-              className="h-10"
-              onClick={() => {
-                logout();
-                router.push('/');
-              }}
-            >
-              Logout
-            </Button>
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ HEADER Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      <header className="bg-who-blue text-white shadow-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <Image src="/logo.png" alt="Vite" width={32} height={32} className="rounded" />
+              <div>
+                <p className="text-base font-bold leading-tight">
+                  {session.organizationName ?? session.name}
+                </p>
+                <p className="text-xs text-white/70">Health Donor Dashboard</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <XionConnectButton compact />
+              <NotificationBell />
+              <button
+                className="text-white/80 hover:text-white transition-colors text-sm font-medium"
+                onClick={() => { logout(); router.push('/'); }}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl space-y-4 px-4 py-4 md:px-8">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total Enrolled" value={metrics.enrolled} />
-          <StatCard label="Milestones Complete" value={metrics.milestonesComplete} color="green" />
-          <StatCard label="Funds Released" value={`$${metrics.fundsReleased.toFixed(0)}`} color="blue" animate={false} />
-          <StatCard label="Escrow Balance" value={`$${metrics.escrowBalance.toFixed(0)}`} color="amber" animate={false} />
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ STAT CARDS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total Enrolled" value={metrics.enrolled} color="blue" />
+          <StatCard label="Milestones Met" value={metrics.milestonesComplete} color="green" />
+          <StatCard label="Funds Released" value={`$${metrics.fundsReleased.toLocaleString()}`} color="blue" />
+          <StatCard label="Escrow Balance" value={`$${metrics.escrowBalance.toLocaleString()}`} color="orange" />
         </div>
 
-        <Tabs
-          value={tab}
-          onChange={setTab}
-          items={[
-            { id: 'overview', label: 'Overview' },
-            { id: 'programs', label: 'Programs' },
-            { id: 'transactions', label: 'Transactions' },
-            { id: 'disputes', label: 'Disputes' },
-            { id: 'reports', label: 'Reports' },
-            { id: 'sms', label: 'SMS Log' },
-          ]}
-        />
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ TABS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        <div className="bg-white border-b border-ui-border sticky top-16 z-30 -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div className="flex gap-8 overflow-x-auto no-scrollbar">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`pb-4 text-sm font-medium transition-colors whitespace-nowrap border-b-2
+                            ${tab === t.id
+                              ? 'border-who-blue text-who-blue'
+                              : 'border-transparent text-ui-text-light hover:text-ui-text'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {tab === 'overview' ? (
-          <div className="space-y-4">
-            <section>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-800">Active Programs</h2>
-                <Link href="/donor/programs/new" className="text-sm font-medium text-teal-primary hover:underline">
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ CONTENT Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        <div className="space-y-6">
+          {tab === 'overview' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-ui-text">Active Programs</h2>
+                <Link href="/donor/programs/new" className="text-sm font-semibold text-who-blue hover:underline">
                   + Create New Program
                 </Link>
               </div>
 
               {programs.length === 0 ? (
-                <div className="rounded-xl bg-gray-50 p-8 text-center">
-                  <p className="mb-4 text-gray-500">No programs yet.</p>
-                  <Link
-                    href="/donor/programs/new"
-                    className="rounded-lg bg-teal-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-teal-dark"
-                  >
-                    Create Your First Program
+                <Card className="text-center py-12">
+                  <p className="text-ui-text-muted mb-6 text-sm">No active humanitarian programs found.</p>
+                  <Link href="/donor/programs/new">
+                    <button className="btn-primary">Create Your First Program</button>
                   </Link>
-                </div>
+                </Card>
               ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                   {programs.map((program) => (
                     <ProgramCard
                       key={program.id}
                       program={program}
-                      enrolledPatients={(patients ?? []).filter((patient) => patient.programId === program.id).length}
+                      enrolledPatients={(patients ?? []).filter((p) => p.programId === program.id).length}
                       onFund={() => setFundingProgram(program)}
-                      onToggleStatus={async (item) => {
-                        await db.programs.update(item.id, {
-                          status: item.status === 'active' ? 'paused' : 'active',
-                        });
-                      }}
                     />
                   ))}
                 </div>
               )}
-            </section>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Milestone Progress</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MilestoneProgressChart program={firstProgram} />
-              </CardContent>
+              <div className="grid gap-6 lg:grid-cols-3">
+                <Card className="lg:col-span-2">
+                  <p className="text-sm font-semibold text-ui-text-light mb-6">Milestone Completion Trends</p>
+                  <MilestoneProgressChart program={firstProgram} />
+                </Card>
+                <Card>
+                  <p className="text-sm font-semibold text-ui-text-light mb-6">Donor Fund Distribution</p>
+                  <FundingMetricsGrid
+                    totalReleased={metrics.fundsReleased}
+                    escrowBalance={metrics.escrowBalance}
+                    enrolledPatients={metrics.enrolled}
+                    milestonesComplete={metrics.milestonesComplete}
+                  />
+                </Card>
+              </div>
+              
+              <Card>
+                <p className="text-sm font-semibold text-ui-text-light mb-6">Regional Coverage Insight</p>
+                <CoverageHeatmap />
+              </Card>
+            </div>
+          )}
+
+          {tab === 'programs' && (
+            <div className="space-y-4">
+              <div className="flex justify-start">
+                <Link href="/donor/programs/new">
+                  <button className="btn-accent">+ Create New Program</button>
+                </Link>
+              </div>
+              <div className="grid gap-6">
+                {programs.map((program) => (
+                  <ProgramCard
+                    key={program.id}
+                    program={program}
+                    enrolledPatients={(patients ?? []).filter((p) => p.programId === program.id).length}
+                    onFund={() => setFundingProgram(program)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === 'transactions' && (
+            <Card padding="none" className="overflow-hidden">
+              <TransactionTable transactions={grants ?? []} />
             </Card>
-            <FundingMetricsGrid
-              totalReleased={metrics.fundsReleased}
-              escrowBalance={metrics.escrowBalance}
-              enrolledPatients={metrics.enrolled}
-              milestonesComplete={metrics.milestonesComplete}
-            />
-            <CoverageHeatmap />
-          </div>
-        ) : null}
+          )}
 
-        {tab === 'programs' ? (
-          <div className="space-y-3">
-            <Link href="/donor/programs/new">
-              <Button className="w-full sm:w-auto">
-                <Plus className="mr-2 h-4 w-4" />
-                Create New Program
-              </Button>
-            </Link>
+          {tab === 'disputes' && (
+            <DisputePanel disputes={(disputes ?? []).filter((d) => d.status !== 'resolved')} />
+          )}
 
-            {programs.map((program) => (
-              <ProgramCard
-                key={program.id}
-                program={program}
-                enrolledPatients={(patients ?? []).filter((patient) => patient.programId === program.id).length}
-                onFund={() => setFundingProgram(program)}
-                onToggleStatus={async (item) => {
-                  await db.programs.update(item.id, {
-                    status: item.status === 'active' ? 'paused' : 'active',
-                  });
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        {tab === 'transactions' ? <TransactionTable transactions={grants ?? []} /> : null}
-
-        {tab === 'disputes' ? <DisputePanel disputes={(disputes ?? []).filter((item) => item.status !== 'resolved')} /> : null}
-
-        {tab === 'reports' ? (
-          <div className="space-y-4">
-            {firstProgram ? <ReportExporter programId={firstProgram.id} /> : null}
-            <Card>
-              <CardHeader>
-                <CardTitle>Sync Log</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto rounded-xl border border-gray-200">
+          {tab === 'reports' && (
+            <div className="space-y-6">
+              {firstProgram && <ReportExporter programId={firstProgram.id} />}
+              <Card>
+                <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">XION Synchronization Log</h3>
+                <div className="overflow-x-auto -mx-6">
                   <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 text-left text-gray-600">
+                    <thead className="bg-ui-bg border-y border-ui-border text-left">
                       <tr>
-                        <th className="px-3 py-2">Batch</th>
-                        <th className="px-3 py-2">Records</th>
-                        <th className="px-3 py-2">Merkle Root</th>
-                        <th className="px-3 py-2">Tx Hash</th>
-                        <th className="px-3 py-2">Submitted</th>
+                        {['Batch ID', 'Records', 'Merkle Root', 'XION Tx Hash', 'Sync Time'].map((h) => (
+                          <th key={h} className="px-6 py-3 font-semibold text-ui-text-muted">{h}</th>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-ui-border">
                       {(syncBatches ?? []).map((batch) => (
-                        <tr key={batch.id} className="border-t border-gray-200">
-                          <td className="px-3 py-2 font-mono text-xs">{batch.id.slice(0, 8)}</td>
-                          <td className="px-3 py-2">{batch.recordCount}</td>
-                          <td className="px-3 py-2 font-mono text-xs">
-                            {batch.merkleRoot.slice(0, 10)}...{batch.merkleRoot.slice(-8)}
+                        <tr key={batch.id} className="hover:bg-ui-bg/50 transition-colors">
+                          <td className="px-6 py-4 font-medium text-who-blue">{batch.id.slice(0, 8)}</td>
+                          <td className="px-6 py-4">{batch.recordCount}</td>
+                          <td className="px-6 py-4 font-mono text-xs text-ui-text-muted">
+                            {batch.merkleRoot.slice(0, 12)}...{batch.merkleRoot.slice(-8)}
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs">
-                            {batch.xionTxHash ? shortTxHash(batch.xionTxHash) : 'N/A'}
+                          <td className="px-6 py-4">
+                            {batch.xionTxHash ? (
+                              <a
+                                href={`https://explorer.burnt.com/xion-testnet-2/transactions/${batch.xionTxHash}`}
+                                target="_blank"
+                                className="text-who-blue hover:underline font-mono text-xs"
+                              >
+                                {shortTxHash(batch.xionTxHash)}
+                              </a>
+                            ) : '-'}
                           </td>
-                          <td className="px-3 py-2">
-                            {batch.submittedAt ? new Date(batch.submittedAt).toLocaleString() : 'N/A'}
+                          <td className="px-6 py-4 text-ui-text-light">
+                            {batch.submittedAt ? new Date(batch.submittedAt).toLocaleString() : '-'}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </CardContent>
-            </Card>
-            <AuditLogTable logs={auditLogs ?? []} />
-          </div>
-        ) : null}
+              </Card>
+              <AuditLogTable logs={auditLogs ?? []} />
+            </div>
+          )}
 
-        {tab === 'sms' ? (
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
-                <tr>
-                  <th className="px-3 py-2">Recipient</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Message</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(smsLogs ?? []).map((log) => (
-                  <tr key={log.id} className="border-t border-gray-200">
-                    <td className="px-3 py-2">{log.to}</td>
-                    <td className="px-3 py-2">{log.type}</td>
-                    <td className="px-3 py-2">{log.message.slice(0, 80)}...</td>
-                    <td className="px-3 py-2">{log.status}</td>
-                    <td className="px-3 py-2">{new Date(log.timestamp).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
+          {tab === 'sms' && (
+            <Card>
+              <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">SMS Communication Log</h3>
+              <div className="overflow-x-auto -mx-6">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-ui-bg border-y border-ui-border text-left">
+                    <tr>
+                      {['Recipient', 'Type', 'Message', 'Timestamp'].map((h) => (
+                        <th key={h} className="px-6 py-3 font-semibold text-ui-text-muted">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ui-border">
+                    {(smsLogs ?? []).map((log) => (
+                      <tr key={log.id} className="hover:bg-ui-bg/50 transition-colors">
+                        <td className="px-6 py-4 font-medium">{log.to}</td>
+                        <td className="px-6 py-4">
+                          <span className={log.type === 'milestone-payment' ? 'badge-blue' : 'badge-orange'}>
+                            {log.type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-ui-text-light max-w-sm truncate">{log.message}</td>
+                        <td className="px-6 py-4 text-xs text-ui-text-muted">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </div>
       </section>
 
-      {fundingProgram ? (
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ FUNDING MODAL Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {fundingProgram && (
         <FundingModal
           program={fundingProgram}
           onClose={() => setFundingProgram(null)}
           onSuccess={() => {
             setFundingProgram(null);
-            toast.success('Escrow funded!');
           }}
         />
-      ) : null}
+      )}
     </main>
   );
 }
+
 
 

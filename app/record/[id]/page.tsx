@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
@@ -90,7 +90,7 @@ export default function PublicRecordPage() {
               <h2 className="mb-2 text-xl font-bold text-gray-800">Record Not Found</h2>
               <p className="mb-6 text-sm text-gray-500">No vaccination record found for ID: {id || 'Unknown'}</p>
               <Input
-                placeholder="Enter Health ID (e.g. HD-ADE001)"
+                placeholder="Enter Health ID (e.g. VITE-ADE001)"
                 value={manualId}
                 onChange={(event) => setManualId(event.target.value.toUpperCase())}
                 className="mb-3 text-center font-mono"

@@ -27,7 +27,7 @@ export function PaymentReceipt({
 
   return (
     <div className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm">
-      <h3 className="text-lg font-semibold text-teal-dark">✓ VITE Health Grant Redeemed</h3>
+      <h3 className="text-lg font-semibold text-teal-dark">Ã¢Å“â€œ VITE Health Grant Redeemed</h3>
       <div className="mt-4 space-y-2 text-sm text-gray-700">
         <p>Amount: {formatCurrency(amount, 'USD')} ({formatCurrency(ngnEquivalent, 'NGN')} equiv.)</p>
         <p>To: {maskPhone(phone)}</p>
@@ -36,9 +36,12 @@ export function PaymentReceipt({
         <p>Ref: {transactionId}</p>
         <p>{formatDateTime(timestamp)}</p>
       </div>
-      <div className="mt-4 border-t border-gray-200 pt-3 text-xs font-medium text-amber-700">
-        SIMULATED - Demo Mode
+      <div className="mt-4 border-t border-ui-border pt-3 text-xs font-medium text-who-blue">
+        Verified on XION Testnet-2 Ã‚Â· Vite Protocol
       </div>
     </div>
   );
 }
+
+
+

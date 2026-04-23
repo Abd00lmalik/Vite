@@ -1,4 +1,4 @@
-﻿export interface LGA {
+export interface LGA {
   id: string;
   name: string;
 }
@@ -432,16 +432,16 @@ export const CLINIC_LOCATIONS: Country[] = [
         name: 'Dakar Region',
         lgas: [
           { id: 'sn-dk-dakar', name: 'Dakar' },
-          { id: 'sn-dk-guediawaye', name: 'Guédiawaye' },
+          { id: 'sn-dk-guediawaye', name: 'GuÃ©diawaye' },
           { id: 'sn-dk-pikine', name: 'Pikine' },
           { id: 'sn-dk-rufisque', name: 'Rufisque' },
         ],
       },
       {
         id: 'sn-thies',
-        name: 'Thiès Region',
+        name: 'ThiÃ¨s Region',
         lgas: [
-          { id: 'sn-th-thies', name: 'Thiès' },
+          { id: 'sn-th-thies', name: 'ThiÃ¨s' },
           { id: 'sn-th-mbour', name: 'Mbour' },
           { id: 'sn-th-tivaouane', name: 'Tivaouane' },
         ],
@@ -551,4 +551,7 @@ export const CLINIC_LOCATIONS: Country[] = [
     ],
   },
 ];
+
+
+
 

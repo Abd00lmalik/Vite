@@ -1,4 +1,4 @@
-﻿export interface GPSCoords {
+export interface GPSCoords {
   lat: number;
   lng: number;
   accuracy: number;
@@ -31,4 +31,7 @@ export function captureGPS(): Promise<GPSCoords> {
     );
   });
 }
+
+
+
 

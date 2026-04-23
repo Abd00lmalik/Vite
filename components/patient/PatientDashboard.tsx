@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Image from 'next/image';
 import { useMemo, useState } from 'react';
@@ -7,8 +7,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CircleHelp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { usePatient } from '@/hooks/usePatient';
@@ -49,82 +48,91 @@ export function PatientDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 pb-24">
-      <header className="border-b border-gray-200 bg-white px-4 py-3 md:px-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="VITE logo" width={36} height={36} className="rounded-md" />
-            <div>
-              <p className="text-lg font-semibold text-gray-900">Hello, {session.name}</p>
-              <p className="text-sm text-gray-600">Patient Dashboard</p>
+    <main className="min-h-screen bg-ui-bg pb-24 font-sans">
+      <header className="bg-who-blue text-white shadow-sm sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <Image src="/logo.png" alt="Vite" width={32} height={32} className="rounded" />
+              <div>
+                <p className="text-base font-bold leading-tight">Hello, {session.name}</p>
+                <p className="text-xs text-white/70">Health Record Portal</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/how-it-works">
-              <Button variant="outline" className="h-10 px-3">
-                <CircleHelp className="mr-1 h-4 w-4" />
-                Guide
-              </Button>
-            </Link>
-            <NotificationBell />
-            <Button
-              variant="outline"
-              className="h-10"
-              onClick={() => {
-                logout();
-                router.push('/');
-              }}
-            >
-              Logout
-            </Button>
+            <div className="flex items-center gap-3">
+              <Link href="/how-it-works">
+                <button className="text-white/80 hover:text-white transition-colors text-sm font-medium flex items-center gap-1">
+                  <CircleHelp className="h-4 w-4" />
+                  Guide
+                </button>
+              </Link>
+              <NotificationBell />
+              <button
+                className="text-white/80 hover:text-white transition-colors text-sm font-medium"
+                onClick={() => {
+                  logout();
+                  router.push('/');
+                }}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl space-y-4 px-4 py-4 md:px-8">
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Find Record</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-              <Input
+          <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Find Digital Health Record</h3>
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
                 placeholder="Enter phone number or Health ID"
                 value={lookupValue}
                 onChange={(event) => setLookupValue(event.target.value)}
+                className="input"
               />
               <Button
-                type="button"
-                variant="outline"
+                variant="primary"
                 onClick={() => lookup(lookupValue)}
-                className="w-full sm:w-auto"
+                className="whitespace-nowrap"
               >
-                Find
+                Find Record
               </Button>
             </div>
-            <QRScanner
-              onScan={(value) => {
-                void lookup(value);
-              }}
-              onManualPhoneLookup={(phone) => {
-                void lookup(phone);
-              }}
-            />
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          </CardContent>
+            <div className="border-t border-ui-border pt-4">
+              <p className="text-xs text-ui-text-muted mb-3 text-center uppercase tracking-widest">Or Scan QR Card</p>
+              <QRScanner
+                onScan={(value) => {
+                  void lookup(value);
+                }}
+                onManualPhoneLookup={(phone) => {
+                  void lookup(phone);
+                }}
+              />
+            </div>
+            {error ? <p className="text-sm text-who-red font-medium text-center">{error}</p> : null}
+          </div>
         </Card>
 
         {patient ? (
-          <Card className="bg-teal-primary text-white">
-            <CardContent className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center">
-              <div>
-                <p className="text-sm text-white/80">Child summary</p>
-                <h2 className="text-2xl font-bold">{patient.name}</h2>
-                <p className="font-mono text-sm">{patient.healthDropId}</p>
-                <p className="mt-2 text-sm text-white/85">Show this at any clinic.</p>
+          <Card className="bg-who-blue text-white overflow-hidden border-none shadow-panel">
+            <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
+              <div className="space-y-2">
+                <div className="badge-blue bg-white/20 text-white mb-2">Verified Patient Card</div>
+                <h2 className="text-3xl font-bold">{patient.name}</h2>
+                <div className="bg-black/10 p-2 rounded font-mono text-sm inline-block">
+                  {patient.healthDropId}
+                </div>
+                <p className="text-sm text-white/80 pt-2 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-who-green animate-pulse" />
+                  Active in {program?.name ?? 'National Program'}
+                </p>
               </div>
-              <QRDisplay healthDropId={patient.healthDropId} patientName={patient.name} size={130} />
-            </CardContent>
+              <div className="bg-white p-2 rounded-lg flex justify-center">
+                <QRDisplay healthDropId={patient.healthDropId} patientName={patient.name} size={140} />
+              </div>
+            </div>
           </Card>
         ) : null}
 
@@ -146,25 +154,18 @@ export function PatientDashboard() {
         ) : null}
 
         <Card>
-          <CardHeader>
-            <CardTitle>Vaccination Timeline</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <VaccinationTimeline records={vaccinations} />
-          </CardContent>
+          <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Vaccination History</h3>
+          <VaccinationTimeline records={vaccinations} />
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Milestone Tracker</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MilestoneTracker milestones={program?.milestones ?? []} records={vaccinations} />
-          </CardContent>
+          <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Health Milestone Status</h3>
+          <MilestoneTracker milestones={program?.milestones ?? []} records={vaccinations} />
         </Card>
       </section>
     </main>
   );
 }
+
 
 

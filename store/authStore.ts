@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthSession } from '@/types';
 
@@ -20,4 +20,7 @@ export const useAuthStore = create<AuthState>()(
     { name: 'vite-auth-session' }
   )
 );
+
+
+
 

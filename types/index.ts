@@ -1,4 +1,4 @@
-﻿export type UserRole = 'patient' | 'health-worker' | 'donor' | 'admin';
+export type UserRole = 'patient' | 'health-worker' | 'donor' | 'admin';
 
 export type SyncStatus = 'pending' | 'synced' | 'flagged';
 
@@ -232,4 +232,7 @@ export interface ProgramReport {
   }>;
   generatedAt: string;
 }
+
+
+
 

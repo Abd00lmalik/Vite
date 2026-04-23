@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -13,13 +13,13 @@ import { useAuthStore } from '@/store/authStore';
 
 const schema = z
   .object({
-    organizationName: z.string().min(2),
-    contactName: z.string().min(2),
-    email: z.string().email(),
-    password: z.string().min(8),
+    organizationName: z.string().min(2, "Organization name is required"),
+    contactName: z.string().min(2, "Contact person name is required"),
+    email: z.string().email("Enter a valid professional email"),
+    password: z.string().min(8, "Security requirement: Minimum 8 characters"),
     confirmPassword: z.string().min(8),
-    country: z.string().min(2),
-    interests: z.array(z.string()).min(1, 'Choose at least one interest'),
+    country: z.string().min(2, "Country is required"),
+    interests: z.array(z.string()).min(1, 'Choose at least one program interest'),
   })
   .refine((values) => values.password === values.confirmPassword, {
     path: ['confirmPassword'],
@@ -29,6 +29,7 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 function strengthLabel(password: string) {
+  if (password.length === 0) return '';
   if (password.length < 8) return 'Weak';
   if (!/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) return 'Fair';
   return 'Strong';
@@ -74,64 +75,100 @@ export function DonorSignupForm() {
     });
 
     if (!result.user) {
-      toast.error(result.error ?? 'Unable to register donor');
+      toast.error(result.error ?? 'Unable to establish donor identity');
       return;
     }
 
     login(buildSession(result.user));
-    toast.success('Donor account created');
+    toast.success('Donor professional account created');
     router.push('/donor');
   };
 
   return (
-    <form className="space-y-3" onSubmit={handleSubmit(onSubmit)}>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Organisation name</label>
-        <Input {...register('organizationName')} />
+    <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="mb-1.5 block text-sm font-semibold text-ui-text">Organization Name *</label>
+          <Input {...register('organizationName')} placeholder="e.g. UNICEF Nigeria" />
+          {errors.organizationName ? <p className="mt-1.5 text-xs font-medium text-who-red">{errors.organizationName.message}</p> : null}
+        </div>
+
+        <div>
+           <label className="mb-1.5 block text-sm font-semibold text-ui-text">Contact Person *</label>
+           <Input {...register('contactName')} placeholder="Enter full name" />
+           {errors.contactName ? <p className="mt-1.5 text-xs font-medium text-who-red">{errors.contactName.message}</p> : null}
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-ui-text">Operational Country *</label>
+          <Input {...register('country')} placeholder="e.g. Nigeria" />
+          {errors.country ? <p className="mt-1.5 text-xs font-medium text-who-red">{errors.country.message}</p> : null}
+        </div>
       </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Contact person name</label>
-        <Input {...register('contactName')} />
+
+      <div className="pt-4 border-t border-ui-border">
+         <label className="mb-1.5 block text-sm font-semibold text-ui-text">Professional Email *</label>
+         <Input type="email" {...register('email')} placeholder="donor.contact@org.org" />
+         {errors.email ? <p className="mt-1.5 text-xs font-medium text-who-red">{errors.email.message}</p> : null}
       </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-        <Input type="email" {...register('email')} />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-ui-text">Password *</label>
+          <Input type="password" {...register('password')} placeholder="Min 8 characters" />
+          {strength && (
+            <p className={`mt-1.5 text-xs font-bold ${
+              strength === 'Strong' ? 'text-who-green' : 
+              strength === 'Fair' ? 'text-who-orange' : 'text-who-red'
+            }`}>
+              Strength: {strength}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-ui-text">Confirm Password *</label>
+          <Input type="password" {...register('confirmPassword')} placeholder="Repeat password" />
+          {errors.confirmPassword ? <p className="mt-1.5 text-xs font-medium text-who-red">{errors.confirmPassword.message}</p> : null}
+        </div>
       </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
-        <Input type="password" {...register('password')} />
-        <p className="mt-1 text-xs text-gray-500">Strength: {strength}</p>
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Confirm password</label>
-        <Input type="password" {...register('confirmPassword')} />
-        {errors.confirmPassword ? <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p> : null}
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Country</label>
-        <Input {...register('country')} />
-      </div>
-      <div>
-        <p className="mb-1 text-sm font-medium text-gray-700">Program interest</p>
+
+      <div className="pt-4 border-t border-ui-border">
+        <p className="mb-3 text-sm font-semibold text-ui-text">Primary Program Interests *</p>
         <div className="grid gap-2 sm:grid-cols-3">
-          {['vaccination', 'antenatal', 'child growth'].map((interest) => (
-            <label key={interest} className="flex items-center gap-2 rounded-md border border-gray-200 p-2 text-sm">
-              <input
-                type="checkbox"
-                checked={interests.includes(interest)}
-                onChange={() => toggleInterest(interest)}
-              />
-              {interest}
-            </label>
+          {[
+            { id: 'vaccination', label: 'Vaccination' },
+            { id: 'antenatal',   label: 'Antenatal' },
+            { id: 'child growth',label: 'Child Growth' },
+          ].map((interest) => (
+            <button
+               key={interest.id}
+               type="button"
+               onClick={() => toggleInterest(interest.id)}
+               className={`flex items-center justify-center px-3 py-2.5 rounded border text-xs font-medium transition-colors
+                          ${interests.includes(interest.id) 
+                            ? 'bg-who-blue text-white border-who-blue' 
+                            : 'bg-white text-ui-text border-ui-border hover:bg-ui-bg'}`}
+            >
+              {interest.label}
+            </button>
           ))}
         </div>
-        {errors.interests ? <p className="mt-1 text-sm text-red-600">{errors.interests.message}</p> : null}
+        {errors.interests ? <p className="mt-1.5 text-xs font-medium text-who-red">{errors.interests.message}</p> : null}
       </div>
-      <Button type="submit" className="w-full" loading={isSubmitting}>
-        Create donor account
-      </Button>
+
+      <div className="pt-2">
+        <Button type="submit" variant="primary" className="w-full h-12 text-base" loading={isSubmitting}>
+          Create Donor Profile
+        </Button>
+      </div>
+
+      <p className="text-xs text-ui-text-muted italic text-center">
+        * Donors can fund programs using XION Testnet-2 once the account is established.
+      </p>
     </form>
   );
 }
+
 
 

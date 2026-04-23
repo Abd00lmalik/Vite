@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { StatCard } from '@/components/ui/StatCard';
@@ -37,6 +37,7 @@ export function FundingMetricsGrid({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={weeklyData}>
             <CartesianGrid strokeDasharray="3 3" />
+            {/* @ts-ignore */}
             <XAxis dataKey="week" />
             <YAxis />
             <Tooltip />
@@ -47,4 +48,7 @@ export function FundingMetricsGrid({
     </div>
   );
 }
+
+
+
 

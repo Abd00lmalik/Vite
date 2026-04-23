@@ -8,9 +8,11 @@ import { useAuthStore } from '@/store/authStore';
 import { runSync } from '@/lib/blockchain/sync';
 import type { SyncProgressUpdate } from '@/lib/blockchain/sync';
 import type { SyncResult } from '@/types';
+import { useXion } from './useXion';
 
 export function useSync() {
   const { session } = useAuthStore();
+  const { signingClient, address: senderAddress } = useXion();
   const [progressStep, setProgressStep] = useState<SyncProgressUpdate | null>(null);
   const {
     isSyncing,
@@ -32,11 +34,14 @@ export function useSync() {
 
   const sync = useCallback(async (): Promise<SyncResult | null> => {
     if (!session || isSyncing) return null;
+    if (!signingClient || !senderAddress) {
+      return null;
+    }
 
     setSyncing(true);
-    setProgressStep('Gathering pending records...');
+    setProgressStep({ step: 1, message: 'Gathering pending records...' });
     try {
-      const result = await runSync(session, setProgressStep);
+      const result = await runSync(session, signingClient, senderAddress, setProgressStep);
       setLastResult(result);
       setPending(
         (await db.vaccinations.where('syncStatus').equals('pending').count()) +
@@ -59,3 +64,6 @@ export function useSync() {
 
   return { sync, isSyncing, lastResult, lastSyncTime, pendingCount, progressStep };
 }
+
+
+

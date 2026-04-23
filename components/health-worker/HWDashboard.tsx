@@ -1,132 +1,123 @@
-﻿'use client';
+'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CircleHelp, Syringe, UserPlus, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
-import { Button } from '@/components/ui/button';
-import { StatCard } from '@/components/ui/StatCard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SyncPanel } from '@/components/shared/SyncPanel';
 import { NotificationBell } from '@/components/shared/NotificationBell';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
+import { XionConnectButton } from '@/components/shared/XionConnectButton';
+import { Card, StatCard } from '@/components/ui/card';
 import { ClinicStatsBar } from './ClinicStatsBar';
 import { RecentPatientsList } from './RecentPatientsList';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 
 export function HWDashboard() {
-  const mounted = useMounted();
+  const mounted     = useMounted();
   const { session } = useAuth('health-worker');
-  const logout = useAuthStore((state) => state.logout);
-  const router = useRouter();
-  const isOnline = useOfflineStatus();
+  const logout      = useAuthStore((s) => s.logout);
+  const router      = useRouter();
+  const isOnline    = useOfflineStatus();
 
   const stats = useLiveQuery(async () => {
     if (!session) return { todayPatients: 0, pendingSync: 0, totalRecords: 0 };
-
     const today = new Date().toISOString().slice(0, 10);
-    const todayPatients = (await db.patients.where('registeredBy').equals(session.userId).toArray()).filter(
-      (patient) => patient.registeredAt.slice(0, 10) === today
-    ).length;
-
+    const todayPatients = (
+      await db.patients.where('registeredBy').equals(session.userId).toArray()
+    ).filter((p) => p.registeredAt.slice(0, 10) === today).length;
     const pendingSync =
       (await db.vaccinations.where('syncStatus').equals('pending').count()) +
       (await db.patients.where('syncStatus').equals('pending').count());
-
-    const totalRecords = await db.vaccinations.where('administeredBy').equals(session.userId).count();
-
+    const totalRecords = await db.vaccinations
+      .where('administeredBy').equals(session.userId).count();
     return { todayPatients, pendingSync, totalRecords };
   }, [session?.userId]);
 
-  if (!mounted || !session) {
-    return <PageSkeleton />;
-  }
+  if (!mounted || !session) return <PageSkeleton />;
 
   return (
-    <main className="min-h-screen bg-gray-50 pb-24">
-      <header className="border-b border-gray-200 bg-white px-4 py-3 md:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="VITE logo" width={38} height={38} className="rounded-md" />
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{session.name}</p>
-              <p className="text-xs text-gray-600">Health Worker - Clinic: {session.clinicId ?? 'clinic-001'}</p>
-            </div>
-          </div>
+    <main className="min-h-screen bg-ui-bg pb-24 font-sans">
 
-          <div className="flex items-center gap-2">
-            <Link href="/how-it-works">
-              <Button variant="outline" className="h-10 px-3">
-                <CircleHelp className="mr-1 h-4 w-4" />
-                Guide
-              </Button>
-            </Link>
-            <NotificationBell />
-            <Button
-              variant="outline"
-              className="h-10"
-              onClick={() => {
-                logout();
-                router.push('/');
-              }}
-            >
-              Logout
-            </Button>
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ HEADER Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      <header className="bg-who-blue text-white shadow-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <Image src="/logo.png" alt="Vite" width={32} height={32} className="rounded" />
+              <div>
+                <p className="text-base font-bold leading-tight">{session.name}</p>
+                <p className="text-xs text-white/70">
+                  Health Worker Ã‚Â· {session.clinicId ?? 'clinic-001'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-1.5 bg-white/10 px-2 py-1 rounded text-xs">
+                <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-who-green' : 'bg-who-orange'}`} />
+                {isOnline ? 'ONLINE' : 'OFFLINE'}
+              </div>
+              <XionConnectButton compact />
+              <NotificationBell />
+              <button
+                className="text-white/80 hover:text-white transition-colors text-sm font-medium"
+                onClick={() => { logout(); router.push('/'); }}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl space-y-4 px-4 py-4 md:px-8">
-        {!isOnline ? <OfflineBanner /> : null}
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {!isOnline && <OfflineBanner />}
         <SyncPanel />
 
-        <div className="grid gap-3 md:grid-cols-2">
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ QUICK ACTIONS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        <div className="grid gap-4 sm:grid-cols-2">
           <Link href="/health-worker/register">
-            <Button className="w-full">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Register New Patient
-            </Button>
+            <button className="w-full bg-who-blue text-white py-6 rounded-lg font-bold text-lg shadow-sm hover:bg-who-blue-dark transition-all flex flex-col items-center justify-center gap-1">
+              <span>+ Register Patient</span>
+              <span className="text-xs font-normal opacity-80 uppercase tracking-widest">New Enrollment</span>
+            </button>
           </Link>
           <Link href="/health-worker/vaccinate">
-            <Button variant="secondary" className="w-full">
-              <Syringe className="mr-2 h-4 w-4" />
-              Record Vaccination
-            </Button>
+            <button className="w-full bg-who-green text-white py-6 rounded-lg font-bold text-lg shadow-sm hover:opacity-90 transition-all flex flex-col items-center justify-center gap-1">
+              <span>Record Vaccination</span>
+              <span className="text-xs font-normal opacity-80 uppercase tracking-widest">Submit Dose</span>
+            </button>
           </Link>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <StatCard label="Today's patients" value={stats?.todayPatients ?? 0} icon={<Users className="h-4 w-4" />} />
-          <StatCard label="Pending sync" value={stats?.pendingSync ?? 0} color="amber" />
-          <StatCard label="Records total" value={stats?.totalRecords ?? 0} color="blue" />
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ STATS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="Today's Patients" value={stats?.todayPatients ?? 0} color="blue" />
+          <StatCard label="Pending Sync" value={stats?.pendingSync ?? 0} color="orange" />
+          <StatCard label="Total Records" value={stats?.totalRecords ?? 0} color="green" />
         </div>
 
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ CLINIC STATS Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <Card>
-          <CardHeader>
-            <CardTitle>This Week's Vaccinations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ClinicStatsBar clinicId={session.clinicId ?? 'clinic-001'} />
-          </CardContent>
+          <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Weekly Vaccination Performance</h3>
+          <ClinicStatsBar clinicId={session.clinicId ?? 'clinic-001'} />
         </Card>
 
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ RECENT PATIENTS Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <Card>
-          <CardHeader>
-            <CardTitle>Recent Patients</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RecentPatientsList workerId={session.userId} />
-          </CardContent>
+          <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Recent Patient Registrations</h3>
+          <RecentPatientsList workerId={session.userId} />
         </Card>
       </section>
     </main>
   );
 }
+
 
 

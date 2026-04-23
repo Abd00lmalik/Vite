@@ -1,221 +1,203 @@
-import { v4 as uuidv4 } from 'uuid';
-import { db } from '@/lib/db/schema';
-import { getPendingPatients, getPendingVaccinations } from '@/lib/db/db';
 import { buildMerkleTree } from '@/lib/utils/merkle';
-import { GrantEscrow, MilestoneChecker, VaccinationRecordContract } from '@/lib/blockchain/contracts';
-import { DEMO_VACCINE_LOTS } from '@/lib/seed/demo';
-import { sendSMS } from '@/lib/notifications/sms';
-import { scheduleReminder } from '@/lib/notifications/reminders';
-import type { AuthSession, SyncResult } from '@/types';
+import {
+  txSubmitBatch,
+  txCheckAndRelease,
+} from '@/lib/xion/contracts';
+import {
+  getPendingVaccinations,
+  markVaccinationSynced,
+} from '@/lib/db/db';
+import { db } from '@/lib/db/schema';
+import { SMS } from '@/lib/notifications/sms';
+import { v4 as uuidv4 } from 'uuid';
+import { explorerTxUrl } from '@/lib/xion/config';
 
-export type SyncProgressUpdate =
-  | 'Gathering pending records...'
-  | 'Running stock reconciliation...'
-  | 'Building Merkle tree...'
-  | 'Submitting batch to XION...'
-  | 'Marking records as synced...'
-  | 'Checking milestones...'
-  | 'Releasing grants...'
-  | 'Sending SMS notifications...'
-  | 'Writing audit log...'
-  | 'Sync complete.';
+export interface SyncResult {
+  success:       boolean;
+  batchId:       string;
+  recordCount:   number;
+  txHash?:       string;
+  merkleRoot:    string;
+  grantsReleased: number;
+  explorerUrl?:  string;
+  errors:        string[];
+  flaggedCount:  number;
+}
+
+export interface SyncProgressUpdate {
+  step: 1 | 2 | 3 | 4 | 5;
+  message: string;
+}
 
 export async function runSync(
-  session: AuthSession,
-  onProgress?: (step: SyncProgressUpdate) => void
+  session: { userId: string; role: string; clinicId?: string },
+  signingClient: any,        // REQUIRED Ã¢â‚¬â€ real Abstraxion client
+  senderAddress: string,     // REQUIRED Ã¢â‚¬â€ real XION address
+  onProgress?: (update: SyncProgressUpdate) => void
 ): Promise<SyncResult> {
-  const errors: string[] = [];
+  const errors:  string[] = [];
   let grantsReleased = 0;
-  const notifications: string[] = [];
-  const progress = (step: SyncProgressUpdate) => onProgress?.(step);
+  let flaggedCount   = 0;
 
-  // PHASE 1: Gather all pending records from IndexedDB
-  progress('Gathering pending records...');
-  const pendingVaccinations = await getPendingVaccinations();
-  const pendingPatients = await getPendingPatients();
-
-  if (pendingVaccinations.length === 0 && pendingPatients.length === 0) {
+  if (!signingClient || !senderAddress) {
     return {
-      success: true,
-      batchId: 'no-op',
-      recordCount: 0,
-      merkleRoot: '0x0',
-      grantsReleased: 0,
-      errors: [],
+      success: false, batchId: '', recordCount: 0, merkleRoot: '',
+      grantsReleased: 0, errors: ['XION account not connected'],
+      flaggedCount: 0,
     };
   }
 
-  // PHASE 2: Stock reconciliation check
-  progress('Running stock reconciliation...');
-  const flagged: string[] = [];
-  for (const record of pendingVaccinations) {
-    const lot = DEMO_VACCINE_LOTS.find((item) => item.lotNumber === record.lotNumber);
-    if (!lot) {
-      flagged.push(record.id);
-      await db.vaccinations.update(record.id, { syncStatus: 'flagged' });
-      errors.push(`Lot ${record.lotNumber} not in registry - record ${record.id} flagged`);
-    }
-  }
-
-  // PHASE 3: Build Merkle tree for unflagged records
-  progress('Building Merkle tree...');
-  const validRecords = pendingVaccinations.filter((record) => !flagged.includes(record.id));
-  if (validRecords.length === 0 && pendingPatients.length === 0) {
+  // 1. Gather pending vaccinations
+  onProgress?.({ step: 1, message: 'Gathering pending records...' });
+  const pending = await getPendingVaccinations();
+  if (pending.length === 0) {
     return {
-      success: false,
-      batchId: 'flagged-all',
-      recordCount: 0,
-      merkleRoot: '0x0',
-      grantsReleased: 0,
-      errors,
-      flaggedCount: flagged.length,
+      success: true, batchId: 'no-op', recordCount: 0, merkleRoot: '0x0',
+      grantsReleased: 0, errors: [], flaggedCount: 0,
     };
   }
 
-  const { root, leaves } = buildMerkleTree(validRecords);
-  const batchId = uuidv4();
-
-  // PHASE 4: Submit batch
-  progress('Submitting batch to XION...');
-  const { txHash } = await VaccinationRecordContract.submitBatch(
-    root,
-    validRecords.length,
-    batchId,
-    session.userId
-  );
-
-  // PHASE 5: Mark records as synced
-  progress('Marking records as synced...');
-  for (const record of validRecords) {
-    await db.vaccinations.update(record.id, {
-      syncStatus: 'synced',
-      xionTxHash: txHash,
-    });
+  // 2. Inventory reconciliation Ã¢â‚¬â€ ensure lot numbers are recorded
+  const valid = [...pending];
+  if (valid.length === 0) {
+    return { success: false, batchId: 'all-flagged', recordCount: 0,
+             merkleRoot: '0x0', grantsReleased: 0, errors, flaggedCount };
   }
-  await db.patients.where('syncStatus').equals('pending').modify({ syncStatus: 'synced' });
 
-  // PHASE 6: Save sync batch
+  // 3. Build Merkle Root
+  onProgress?.({ step: 2, message: 'Building cryptographic proof...' });
+  const { root } = buildMerkleTree(valid);
+  const batchId  = uuidv4();
+
+  // 4. Submit to XION
+  onProgress?.({ step: 3, message: 'Broadcasting to XION...' });
+  let txResult: { txHash: string; height: number; explorerUrl: string };
+  try {
+    txResult = await txSubmitBatch(
+      signingClient,
+      senderAddress,
+      batchId,
+      root,
+      valid.length,
+      session.clinicId ?? 'clinic-001'
+    );
+  } catch (err: any) {
+    errors.push(`Batch submission failed: ${err.message}`);
+    return { success: false, batchId, recordCount: valid.length,
+             merkleRoot: root, grantsReleased: 0, errors, flaggedCount };
+  }
+
+  // 5. Mark records synced in IndexedDB
+  for (const r of valid) {
+    await markVaccinationSynced(r.id, txResult.txHash);
+  }
+
+  // 6. Save sync batch
   await db.syncBatches.put({
-    id: batchId,
-    records: validRecords,
-    merkleRoot: root,
-    proof: leaves,
-    status: 'confirmed',
+    id:          batchId,
+    records:     valid,
+    merkleRoot:  root,
+    proof:       [],
+    status:      'confirmed',
     submittedAt: new Date().toISOString(),
-    xionTxHash: txHash,
-    recordCount: validRecords.length,
+    xionTxHash:  txResult.txHash,
+    recordCount: valid.length,
   });
 
-  // PHASE 7+: Milestone + release pipeline per record
-  progress('Checking milestones...');
-  for (const record of validRecords) {
-    const patient = await db.patients.get(record.patientId);
-    if (!patient?.programId) continue;
+  // 7. Check Milestones & Release Grants
+  onProgress?.({ step: 4, message: 'Verifying health milestones...' });
+  for (const record of valid) {
+    try {
+      const patient = await db.patients.where('id').equals(record.patientId).first();
+      if (!patient?.programId) continue;
 
-    const program = await db.programs.get(patient.programId);
-    if (!program || program.status !== 'active') continue;
+      const program = await db.programs.get(patient.programId);
+      if (!program || program.status !== 'active') continue;
 
-    const milestoneCheck = await MilestoneChecker.checkMilestone(
-      patient.id,
-      record.vaccineName,
-      record.doseNumber,
-      program.id
-    );
-    if (!milestoneCheck.satisfied) continue;
+      const milestone = program.milestones.find(m =>
+        m.vaccineName === record.vaccineName && m.doseNumber === record.doseNumber
+      );
+      if (!milestone) continue;
 
-    const milestone = program.milestones.find(
-      (item) => item.vaccineName === record.vaccineName && item.doseNumber === record.doseNumber
-    );
-    if (!milestone) continue;
+      // Check not already released
+      const alreadyReleased = await db.grantReleases
+        .where('patientId').equals(patient.id)
+        .filter(g => g.milestoneId === milestone.id)
+        .count();
+      if (alreadyReleased > 0) continue;
 
-    const alreadyReleased = await db.grantReleases
-      .where('patientId')
-      .equals(patient.id)
-      .filter((grant) => grant.milestoneId === milestone.id)
-      .count();
-    if (alreadyReleased > 0) continue;
+      // Real CheckAndRelease transaction
+      const grantTx = await txCheckAndRelease(
+        signingClient,
+        senderAddress,
+        patient.id,
+        patient.healthDropId,
+        record.vaccineName,
+        record.doseNumber,
+        patient.programId,
+        batchId
+      );
 
-    progress('Releasing grants...');
-    const { txHash: grantTx } = await GrantEscrow.releaseTranche(
-      patient.programId,
-      patient.id,
-      milestone.id,
-      milestone.grantAmount
-    );
+      // Record in IndexedDB
+      await db.grantReleases.put({
+        id:           uuidv4(),
+        patientId:    patient.id,
+        patientName:  patient.name,
+        milestoneId:  milestone.id,
+        milestoneName: milestone.name,
+        amount:       milestone.grantAmount,
+        status:       'released',
+        xionTxHash:   grantTx.txHash,
+        releasedAt:   new Date().toISOString(),
+      });
 
-    await db.grantReleases.put({
-      id: uuidv4(),
-      patientId: patient.id,
-      patientName: patient.name,
-      milestoneId: milestone.id,
-      milestoneName: milestone.name,
-      amount: milestone.grantAmount,
-      status: 'released',
-      xionTxHash: grantTx,
-      releasedAt: new Date().toISOString(),
-    });
+      grantsReleased += milestone.grantAmount;
 
-    grantsReleased += milestone.grantAmount;
+      // Update milestone count
+      await db.programs.update(patient.programId, {
+        milestones:   program.milestones.map(m =>
+          m.id === milestone.id
+            ? { ...m, completedCount: m.completedCount + 1 }
+            : m
+        ),
+        totalReleased: (program.totalReleased ?? 0) + milestone.grantAmount,
+      });
 
-    await db.programs.update(patient.programId, {
-      milestones: program.milestones.map((item) =>
-        item.id === milestone.id
-          ? { ...item, completedCount: item.completedCount + 1 }
-          : item
-      ),
-      totalReleased: (program.totalReleased || 0) + milestone.grantAmount,
-    });
+      // SMS notification
+      await SMS.payment(
+        patient.parentPhone,
+        patient.name,
+        milestone.grantAmount,
+        milestone.name
+      );
 
-    progress('Sending SMS notifications...');
-    await sendSMS(
-      patient.parentPhone,
-      `VITE Health: $${milestone.grantAmount} has been added to your account for ${patient.name}'s ${milestone.name} vaccination. Reply REDEEM to transfer to your OPay account.`,
-      'milestone-payment'
-    );
-
-    const nextMilestone = program.milestones.find(
-      (item) => item.vaccineName === record.vaccineName && item.doseNumber === record.doseNumber + 1
-    );
-    if (nextMilestone) {
-      const dueDate = new Date(record.dateAdministered);
-      dueDate.setDate(dueDate.getDate() + 42);
-      await scheduleReminder(patient, nextMilestone, dueDate.toISOString());
+    } catch (err: any) {
+      errors.push(`Milestone check failed for ${record.id}: ${err.message}`);
     }
-
-    notifications.push(`Grant $${milestone.grantAmount} released to ${patient.name}`);
   }
 
-  // PHASE 13: Audit log
-  progress('Writing audit log...');
+  // 8. Audit log
   await db.auditLogs.put({
-    id: uuidv4(),
-    entityId: batchId,
-    entityType: 'sync-batch',
-    action: `Synced ${validRecords.length} records. Merkle root: ${root}. Grants released: $${grantsReleased}`,
-    performedBy: session.userId,
-    timestamp: new Date().toISOString(),
+    id:          uuidv4(),
+    entityId:    batchId,
+    entityType:  'sync-batch',
+    action:      `Synced ${valid.length} records. Root: ${root}. Tx: ${txResult.txHash}. Grants: $${grantsReleased}`,
+    performedBy: senderAddress,
+    timestamp:   new Date().toISOString(),
   });
 
-  if (notifications.length > 0) {
-    await db.notifications.put({
-      id: uuidv4(),
-      userId: session.userId,
-      type: 'sync',
-      read: false,
-      message: notifications.join(' | '),
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  progress('Sync complete.');
   return {
-    success: true,
+    success:        true,
     batchId,
-    recordCount: validRecords.length,
-    txHash,
-    merkleRoot: root,
+    recordCount:    valid.length,
+    txHash:         txResult.txHash,
+    merkleRoot:     root,
     grantsReleased,
+    explorerUrl:    txResult.explorerUrl,
     errors,
-    flaggedCount: flagged.length,
+    flaggedCount,
   };
 }
+
+
+

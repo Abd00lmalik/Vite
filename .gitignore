@@ -17,3 +17,14 @@ node_modules
 pnpm-lock.yaml
 public/sw.js
 public/workbox-*.js
+
+# Mobile app
+mobile/node_modules/
+mobile/.env
+mobile/.env.local
+
+# Rust / CosmWasm build artifacts
+contracts/target/
+contracts/artifacts/
+*.mnemonic
+*.mnemonic.txt

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { motion } from 'framer-motion';
 import { Clock3, FileX, ShieldX } from 'lucide-react';
@@ -59,5 +59,8 @@ export function ProblemSection() {
     </section>
   );
 }
+
+
+
 
 

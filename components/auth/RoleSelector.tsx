@@ -1,5 +1,4 @@
-﻿import { Building2, Hospital, Users } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Building2, Hospital, Users } from 'lucide-react';
 
 export type RoleChoice = 'health-worker' | 'patient' | 'donor';
 
@@ -12,19 +11,19 @@ const roles = [
   {
     id: 'health-worker' as const,
     title: "I'm a Health Worker",
-    subtitle: 'Email + password login',
+    subtitle: 'Manage records & sync to XION',
     icon: Hospital,
   },
   {
     id: 'patient' as const,
     title: "I'm a Patient / Family",
-    subtitle: 'Phone number login',
+    subtitle: 'Access your health portable wallet',
     icon: Users,
   },
   {
     id: 'donor' as const,
     title: "I'm a Donor / NGO",
-    subtitle: 'Email + password login',
+    subtitle: 'Verify impact & fund grant programs',
     icon: Building2,
   },
 ];
@@ -34,24 +33,35 @@ export function RoleSelector({ value, onChange }: RoleSelectorProps) {
     <div className="space-y-3">
       {roles.map((role) => {
         const Icon = role.icon;
+        const isActive = value === role.id;
         return (
-          <button key={role.id} type="button" onClick={() => onChange(role.id)} className="w-full text-left">
-            <Card className={value === role.id ? 'border-teal-primary ring-2 ring-teal-100' : 'hover:border-teal-200'}>
-              <CardContent className="flex items-center gap-3 p-4">
-                <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-teal-50 text-teal-dark">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span>
-                  <span className="block text-base font-semibold text-gray-900">{role.title}</span>
-                  <span className="block text-sm text-gray-600">{role.subtitle}</span>
-                </span>
-              </CardContent>
-            </Card>
+          <button
+            key={role.id}
+            type="button"
+            onClick={() => onChange(role.id)}
+            className={`w-full text-left p-4 rounded-lg border-2 transition-all duration-200 flex items-center gap-4
+                       ${isActive 
+                         ? 'border-who-blue bg-who-blue-light shadow-sm' 
+                         : 'border-ui-border bg-white hover:border-who-blue-dark/30 hover:bg-ui-bg'}`}
+          >
+            <div className={`flex-shrink-0 h-12 w-12 rounded-full flex items-center justify-center
+                          ${isActive ? 'bg-who-blue text-white' : 'bg-ui-bg text-ui-text-muted'}`}>
+              <Icon className="h-6 w-6" />
+            </div>
+            <div>
+              <p className={`text-sm font-bold ${isActive ? 'text-who-blue' : 'text-ui-text'}`}>
+                {role.title}
+              </p>
+              <p className={`text-xs ${isActive ? 'text-who-blue-dark/80' : 'text-ui-text-light'}`}>
+                {role.subtitle}
+              </p>
+            </div>
           </button>
         );
       })}
     </div>
   );
 }
+
 
 
