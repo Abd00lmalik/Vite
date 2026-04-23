@@ -432,16 +432,16 @@ export const CLINIC_LOCATIONS: Country[] = [
         name: 'Dakar Region',
         lgas: [
           { id: 'sn-dk-dakar', name: 'Dakar' },
-          { id: 'sn-dk-guediawaye', name: 'GuÃ©diawaye' },
+          { id: 'sn-dk-guediawaye', name: 'Guediawaye' },
           { id: 'sn-dk-pikine', name: 'Pikine' },
           { id: 'sn-dk-rufisque', name: 'Rufisque' },
         ],
       },
       {
         id: 'sn-thies',
-        name: 'ThiÃ¨s Region',
+        name: 'Thies Region',
         lgas: [
-          { id: 'sn-th-thies', name: 'ThiÃ¨s' },
+          { id: 'sn-th-thies', name: 'Thies' },
           { id: 'sn-th-mbour', name: 'Mbour' },
           { id: 'sn-th-tivaouane', name: 'Tivaouane' },
         ],

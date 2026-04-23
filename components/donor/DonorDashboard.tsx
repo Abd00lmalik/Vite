@@ -101,7 +101,7 @@ export function DonorDashboard() {
   return (
     <main className="min-h-screen bg-ui-bg pb-24 font-sans">
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ HEADER Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── HEADER ── */}
       <header className="bg-who-blue text-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -131,7 +131,7 @@ export function DonorDashboard() {
 
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ STAT CARDS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── STAT CARDS ── */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Total Enrolled" value={metrics.enrolled} color="blue" />
           <StatCard label="Milestones Met" value={metrics.milestonesComplete} color="green" />
@@ -139,7 +139,7 @@ export function DonorDashboard() {
           <StatCard label="Escrow Balance" value={`$${metrics.escrowBalance.toLocaleString()}`} color="orange" />
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ TABS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── TABS ── */}
         <div className="bg-white border-b border-ui-border sticky top-16 z-30 -mx-4 px-4 sm:mx-0 sm:px-0">
           <div className="flex gap-8 overflow-x-auto no-scrollbar">
             {TABS.map((t) => (
@@ -157,7 +157,7 @@ export function DonorDashboard() {
           </div>
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ CONTENT Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── CONTENT ── */}
         <div className="space-y-6">
           {tab === 'overview' && (
             <div className="space-y-6">
@@ -322,7 +322,7 @@ export function DonorDashboard() {
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ FUNDING MODAL Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── FUNDING MODAL ── */}
       {fundingProgram && (
         <FundingModal
           program={fundingProgram}

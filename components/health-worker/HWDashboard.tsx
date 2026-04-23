@@ -44,7 +44,7 @@ export function HWDashboard() {
   return (
     <main className="min-h-screen bg-ui-bg pb-24 font-sans">
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ HEADER Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── HEADER ── */}
       <header className="bg-who-blue text-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -53,7 +53,7 @@ export function HWDashboard() {
               <div>
                 <p className="text-base font-bold leading-tight">{session.name}</p>
                 <p className="text-xs text-white/70">
-                  Health Worker Ã‚Â· {session.clinicId ?? 'clinic-001'}
+                  Health Worker · {session.clinicId ?? 'clinic-001'}
                 </p>
               </div>
             </div>
@@ -80,7 +80,7 @@ export function HWDashboard() {
         {!isOnline && <OfflineBanner />}
         <SyncPanel />
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ QUICK ACTIONS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── QUICK ACTIONS ── */}
         <div className="grid gap-4 sm:grid-cols-2">
           <Link href="/health-worker/register">
             <button className="w-full bg-who-blue text-white py-6 rounded-lg font-bold text-lg shadow-sm hover:bg-who-blue-dark transition-all flex flex-col items-center justify-center gap-1">
@@ -96,20 +96,20 @@ export function HWDashboard() {
           </Link>
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ STATS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── STATS ── */}
         <div className="grid gap-4 sm:grid-cols-3">
           <StatCard label="Today's Patients" value={stats?.todayPatients ?? 0} color="blue" />
           <StatCard label="Pending Sync" value={stats?.pendingSync ?? 0} color="orange" />
           <StatCard label="Total Records" value={stats?.totalRecords ?? 0} color="green" />
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ CLINIC STATS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── CLINIC STATS ── */}
         <Card>
           <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Weekly Vaccination Performance</h3>
           <ClinicStatsBar clinicId={session.clinicId ?? 'clinic-001'} />
         </Card>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ RECENT PATIENTS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── RECENT PATIENTS ── */}
         <Card>
           <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Recent Patient Registrations</h3>
           <RecentPatientsList workerId={session.userId} />

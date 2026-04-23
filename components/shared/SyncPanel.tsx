@@ -114,7 +114,7 @@ export function SyncPanel() {
                 i === step ? 'text-who-blue' :
                 'text-gray-300'
               }`}>
-                {i < step ? 'Ã¢Å“â€œ' : i === step ? 'Ã¢â€”Â' : 'Ã¢â€”â€¹'}
+                {i < step ? '✓' : i === step ? '●' : '○'}
               </span>
               <span className={
                 i < step  ? 'text-who-green' :
@@ -131,7 +131,7 @@ export function SyncPanel() {
         <div className="mt-3 p-3 bg-who-green-light border border-who-green/30
                         rounded-lg text-xs space-y-1.5">
           <p className="font-semibold text-who-green">
-            Ã¢Å“â€œ {result.recordCount} records confirmed on XION testnet-2
+            ✓ {result.recordCount} records confirmed on XION testnet-2
           </p>
           <p className="text-ui-text-muted">
             Root: {result.merkleRoot.slice(0,12)}...{result.merkleRoot.slice(-8)}
@@ -143,7 +143,7 @@ export function SyncPanel() {
           )}
           {result.flaggedCount > 0 && (
             <p className="text-who-orange">
-              Ã¢Å¡Â  {result.flaggedCount} records flagged for review
+              ⚠ {result.flaggedCount} records flagged for review
             </p>
           )}
           <a

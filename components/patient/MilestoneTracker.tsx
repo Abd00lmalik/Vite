@@ -21,8 +21,8 @@ export function MilestoneTracker({ milestones, records }: MilestoneTrackerProps)
       id: milestone.id,
       title: milestone.name,
       caption: completed
-        ? `Completed â€¢ $${milestone.grantAmount}`
-        : `Pending â€¢ $${milestone.grantAmount}`,
+        ? `Completed • $${milestone.grantAmount}`
+        : `Pending • $${milestone.grantAmount}`,
       status: completed ? ('complete' as const) : ('pending' as const),
     };
   });

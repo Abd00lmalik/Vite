@@ -15,7 +15,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-white">
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ HEADER Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── HEADER ── */}
       <header className="bg-who-blue text-white sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -55,7 +55,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ HERO Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── HERO ── */}
       <section className="bg-who-blue text-white py-20 px-4">
         <div className="max-w-5xl mx-auto text-center">
           <motion.div
@@ -64,7 +64,7 @@ export default function HomePage() {
             <motion.p variants={fadeUp}
                       className="text-who-orange font-semibold text-sm uppercase
                                  tracking-wide mb-4">
-              Built on XION Blockchain Ã‚Â· Testnet-2
+              Built on XION Blockchain · Testnet-2
             </motion.p>
             <motion.h1 variants={fadeUp}
                        className="text-4xl md:text-6xl font-bold text-white mb-6
@@ -101,20 +101,20 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ PARTNERS BAR Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── PARTNERS BAR ── */}
       <div className="bg-white border-b border-ui-border py-5">
         <div className="max-w-5xl mx-auto px-4 text-center">
           <p className="text-xs text-ui-text-muted uppercase tracking-wide mb-3">
             Aligned with
           </p>
           <p className="text-sm font-medium text-ui-text-light">
-            UN Sustainable Development Goals Ã‚Â· GAVI Ã‚Â· UNICEF Ã‚Â· WHO Ã‚Â·
+            UN Sustainable Development Goals · GAVI · UNICEF · WHO ·
             Blockchain for Good Alliance
           </p>
         </div>
       </div>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ PROBLEM 1: Vaccine Records (image left, text right) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── PROBLEM 1: Vaccine Records (image left, text right) ── */}
       <section className="py-20 px-4 bg-white">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <motion.div
@@ -165,7 +165,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ PROBLEM 2: Donor Grants (text left, image right) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── PROBLEM 2: Donor Grants (text left, image right) ── */}
       <section className="py-20 px-4 bg-ui-bg">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <motion.div
@@ -193,7 +193,7 @@ export default function HomePage() {
             <div className="flex items-center gap-3 p-4 bg-who-orange-light
                             rounded-lg border-l-4 border-who-orange">
               <div>
-                <p className="text-2xl font-bold text-who-orange">30Ã¢â‚¬â€œ40%</p>
+                <p className="text-2xl font-bold text-who-orange">30-40%</p>
                 <p className="text-sm text-ui-text-light">
                   of humanitarian aid lost to fraud or administrative waste
                 </p>
@@ -218,7 +218,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ STATS GRID Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── STATS GRID ── */}
       <section className="py-20 px-4 bg-white border-t border-ui-border">
         <div className="max-w-6xl mx-auto">
           <motion.div
@@ -242,7 +242,7 @@ export default function HomePage() {
               { num: '42%',    color: 'orange',
                 label: 'DTP3 completion rate in Nigeria',
                 src:   'WHO/UNICEF 2023' },
-              { num: '30Ã¢â‚¬â€œ40%', color: 'orange',
+              { num: '30-40%', color: 'orange',
                 label: 'Aid lost to fraud or waste',
                 src:   'Transparency International' },
               { num: '$96.4B', color: 'blue',
@@ -275,7 +275,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ HOW IT WORKS Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── HOW IT WORKS ── */}
       <section className="py-20 px-4 bg-who-blue-light">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
@@ -323,26 +323,26 @@ export default function HomePage() {
             <Link href="/how-it-works"
                   className="text-who-blue text-sm font-medium
                              hover:underline">
-              Read the full technical guide Ã¢â€ â€™
+              Read the full technical guide →
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ COVERAGE Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── COVERAGE ── */}
       <section className="py-10 bg-white border-t border-ui-border">
         <div className="max-w-5xl mx-auto px-4 text-center">
           <p className="text-xs text-ui-text-muted uppercase tracking-wider mb-3">
             Operating across
           </p>
           <p className="text-sm font-medium text-ui-text-light">
-            Nigeria Ã‚Â· Ghana Ã‚Â· Kenya Ã‚Â· Ethiopia Ã‚Â· Tanzania Ã‚Â· Uganda Ã‚Â·
-            South Africa Ã‚Â· Senegal Ã‚Â· Rwanda Ã‚Â· DR Congo
+            Nigeria · Ghana · Kenya · Ethiopia · Tanzania · Uganda ·
+            South Africa · Senegal · Rwanda · DR Congo
           </p>
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ CTA Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── CTA ── */}
       <section className="py-20 px-4 bg-who-blue text-white">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-4">Ready to close the gap?</h2>
@@ -365,7 +365,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Ã¢â€â‚¬Ã¢â€â‚¬ FOOTER Ã¢â€â‚¬Ã¢â€â‚¬ */}
+      {/* ── FOOTER ── */}
       <footer className="bg-gray-900 text-white py-10 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center
@@ -398,7 +398,7 @@ export default function HomePage() {
           </div>
           <div className="border-t border-gray-800 mt-8 pt-6 text-center">
             <p className="text-xs text-gray-500">
-              Ã‚Â© 2026 Vite Ã‚Â· Blockchain for Good Alliance Ã‚Â· GIA 2026 Ã‚Â·
+              © 2026 Vite · Blockchain for Good Alliance · GIA 2026 ·
               SDG 1, 3, 16, 17
             </p>
           </div>

@@ -64,7 +64,7 @@ export default function SignUpPage() {
                       className="text-xs font-medium text-who-blue hover:underline"
                       onClick={() => setRole(null)}
                     >
-                      Ã¢â€ Â Back to Roles
+                      ← Back to Roles
                     </button>
                   </div>
 
@@ -88,7 +88,7 @@ export default function SignUpPage() {
         
         <div className="text-center pt-4">
            <Link href="/" className="text-xs text-ui-text-muted hover:text-who-blue transition-colors">
-             Ã¢â€ Â Back to Homepage
+             ← Back to Homepage
            </Link>
         </div>
       </div>

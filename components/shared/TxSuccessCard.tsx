@@ -42,7 +42,7 @@ export function TxSuccessCard({ txHash, title, details = [] }: TxSuccessCardProp
       </a>
 
       <p className="text-xs text-ui-text-muted mt-3">
-        Transaction confirmed on XION testnet-2 Ã‚Â· Powered by Abstraxion
+        Transaction confirmed on XION testnet-2 · Powered by Abstraxion
       </p>
     </div>
   );

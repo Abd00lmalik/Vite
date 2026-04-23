@@ -7,7 +7,7 @@ import './globals.css';
 import { Providers } from '@/components/shared/Providers';
 
 export const metadata: Metadata = {
-  title: 'Vite Ã¢â‚¬â€ Verified Health Records',
+  title: 'Vite - Verified Health Records',
   description: 'Universal vaccination records and conditional health grants on XION',
   manifest: '/manifest.json',
 };

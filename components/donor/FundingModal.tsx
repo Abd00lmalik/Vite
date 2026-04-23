@@ -149,7 +149,7 @@ export function FundingModal({ program, onClose, onSuccess }: Props) {
                 </div>
               )}
               <p className="text-xs text-ui-text-muted mt-4">
-                Log in with email or Google Ã¢â‚¬â€ no crypto wallet needed.
+                Log in with email or Google - no crypto wallet needed.
                 Get testnet tokens at{' '}
                 <a href="https://faucet.xion.burnt.com" target="_blank"
                    rel="noopener noreferrer"

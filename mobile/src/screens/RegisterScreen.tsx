@@ -75,7 +75,7 @@ export function RegisterScreen({ navigation }: any) {
     return (
       <View style={[s.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <View style={s.successCircle}>
-          <Text style={{ fontSize: 40 }}>Ã¢Å“â€œ</Text>
+          <Text style={{ fontSize: 40 }}>✓</Text>
         </View>
         <Text style={s.successTitle}>Registry Success</Text>
         <Text style={s.successSub}>A new digital health ID has been issued for {name}.</Text>
@@ -160,7 +160,7 @@ export function RegisterScreen({ navigation }: any) {
       {gps.lat !== 0 && (
         <View style={s.gpsBadge}>
           <Text style={s.gpsText}>
-            Ã°Å¸â€œÅ’ GPS Confirmed: {gps.lat.toFixed(4)}, {gps.lng.toFixed(4)}
+            📌 GPS Confirmed: {gps.lat.toFixed(4)}, {gps.lng.toFixed(4)}
           </Text>
         </View>
       )}

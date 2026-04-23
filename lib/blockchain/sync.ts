@@ -31,8 +31,8 @@ export interface SyncProgressUpdate {
 
 export async function runSync(
   session: { userId: string; role: string; clinicId?: string },
-  signingClient: any,        // REQUIRED Ã¢â‚¬â€ real Abstraxion client
-  senderAddress: string,     // REQUIRED Ã¢â‚¬â€ real XION address
+  signingClient: any,        // REQUIRED - real Abstraxion client
+  senderAddress: string,     // REQUIRED - real XION address
   onProgress?: (update: SyncProgressUpdate) => void
 ): Promise<SyncResult> {
   const errors:  string[] = [];
@@ -57,7 +57,7 @@ export async function runSync(
     };
   }
 
-  // 2. Inventory reconciliation Ã¢â‚¬â€ ensure lot numbers are recorded
+  // 2. Inventory reconciliation - ensure lot numbers are recorded
   const valid = [...pending];
   if (valid.length === 0) {
     return { success: false, batchId: 'all-flagged', recordCount: 0,

@@ -82,7 +82,7 @@ export function RedeemFlow({ patient, grants, onComplete }: RedeemFlowProps) {
           {PROCESSING_STEPS.map((label, index) => (
             <div key={label} className="flex items-center gap-2">
               {index <= progressIndex ? (
-                <span className="text-who-green font-semibold">Ã¢Å“â€œ</span>
+                <span className="text-who-green font-semibold">✓</span>
               ) : (
                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-ui-border border-t-who-blue" />
               )}

@@ -99,12 +99,12 @@ export function VaccinateScreen({ navigation }: any) {
     return (
       <View style={[s.container, { alignItems: 'center', justifyContent: 'center' }]}>
         <View style={s.successCircle}>
-          <Text style={{ fontSize: 40, color: '#009900' }}>Ã¢Å“â€œ</Text>
+          <Text style={{ fontSize: 40, color: '#009900' }}>✓</Text>
         </View>
         <Text style={s.successTitle}>Immunization Recorded</Text>
         <Text style={s.successSub}>{vaccine}: Dose {dose} administered to {patient?.name}</Text>
         <View style={s.offlineBadge}>
-          <Text style={s.offlineText}>Synced to local ledger Ã‚Â· XION verification pending</Text>
+          <Text style={s.offlineText}>Synced to local ledger · XION verification pending</Text>
         </View>
         
         <TouchableOpacity style={s.primaryBtn} onPress={() => navigation.goBack()}>
@@ -156,9 +156,9 @@ export function VaccinateScreen({ navigation }: any) {
               <Text style={s.sectionLabel}>Immunization History</Text>
               {history.map((v: any) => (
                 <View key={v.id} style={s.historyRow}>
-                  <Text style={s.historyIcon}>Ã¢Å“â€œ</Text>
+                  <Text style={s.historyIcon}>✓</Text>
                   <Text style={s.historyText}>
-                    {v.vaccine_name} Dose {v.dose_number} Ã‚Â· {v.date_administered}
+                    {v.vaccine_name} Dose {v.dose_number} · {v.date_administered}
                   </Text>
                 </View>
               ))}
@@ -208,7 +208,7 @@ export function VaccinateScreen({ navigation }: any) {
 
             {gps.lat !== 0 && (
               <View style={s.gpsBadge}>
-                <Text style={s.gpsText}>Ã°Å¸â€œÂ GPS: {gps.lat.toFixed(4)}, {gps.lng.toFixed(4)}</Text>
+                <Text style={s.gpsText}>📍 GPS: {gps.lat.toFixed(4)}, {gps.lng.toFixed(4)}</Text>
               </View>
             )}
 

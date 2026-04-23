@@ -33,7 +33,7 @@ export function CoverageHeatmap() {
         ))}
       </div>
       <p className="text-xs text-ui-text-muted text-center">
-        Regional DTP3 coverage rates Ã‚Â· Source: Vite field data
+        Regional DTP3 coverage rates · Source: Vite field data
       </p>
     </div>
   );

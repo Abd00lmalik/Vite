@@ -10,7 +10,7 @@ export function ConfigGuard({ children }: { children: React.ReactNode }) {
                         max-w-lg w-full shadow-modal text-center">
           <div className="w-16 h-16 bg-who-orange-light rounded-full
                           flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">Ã¢Å¡â„¢Ã¯Â¸Â</span>
+            <span className="text-3xl">⚠️</span>
           </div>
           <h2 className="text-xl font-bold text-ui-text mb-3">
             XION Configuration Required

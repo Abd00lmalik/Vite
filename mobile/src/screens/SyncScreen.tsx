@@ -71,7 +71,7 @@ export function SyncScreen({ navigation }: any) {
     // Step 2: XION Broadcast
     setStep(2);
     await sleep(1500);
-    // Generate a local batch reference Ã¢â‚¬â€ on-chain submission happens
+    // Generate a local batch reference - on-chain submission happens
     // when the worker syncs via the web dashboard with Abstraxion
     let txHash = `local-${batchId}`;
     let height = 0;
@@ -108,7 +108,7 @@ export function SyncScreen({ navigation }: any) {
       
       <View style={s.header}>
         <Text style={s.title}>Data Synchronization</Text>
-        <Text style={s.subtitle}>Secure Registry Ã‚Â· XION Testnet-2</Text>
+        <Text style={s.subtitle}>Secure Registry · XION Testnet-2</Text>
       </View>
 
       <TouchableOpacity
@@ -136,7 +136,7 @@ export function SyncScreen({ navigation }: any) {
                   color: i < step ? '#009900' : i === step ? '#F37021' : '#DDD',
                   fontSize: 12, fontWeight: '800'
                 }}>
-                  {i < step ? 'Ã¢Å“â€œ' : i === step ? 'Ã¢â€”Â' : 'Ã¢â€”â€¹'}
+                  {i < step ? '✓' : i === step ? '●' : '○'}
                 </Text>
               </View>
               <Text style={[s.stepLabel, {

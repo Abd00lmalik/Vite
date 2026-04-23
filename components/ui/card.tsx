@@ -47,7 +47,7 @@ export function StatCard({
   );
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Compatibility wrappers for shadcn-style card API Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ── Compatibility wrappers for shadcn-style card API ── */
 
 export function CardHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`pb-4 ${className}`}>{children}</div>;

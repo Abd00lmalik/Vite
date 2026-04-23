@@ -25,7 +25,7 @@ export function RecordsScreen({ navigation }: any) {
       <View style={s.patientLeft}>
         <Text style={s.hdIdBadge}>{item.health_drop_id}</Text>
         <Text style={s.patientName}>{item.name}</Text>
-        <Text style={s.patientMeta}>{item.dob} Ã‚Â· {item.sex}</Text>
+        <Text style={s.patientMeta}>{item.dob} · {item.sex}</Text>
       </View>
       <View style={s.patientRight}>
         <View style={[s.syncStatus, { backgroundColor: item.sync_status === 'synced' ? '#E6F5E6' : '#FEF3EC' }]}>
@@ -33,7 +33,7 @@ export function RecordsScreen({ navigation }: any) {
             {item.sync_status === 'synced' ? 'Synced' : 'Pending'}
           </Text>
         </View>
-        <Text style={s.chevron}>Ã¢â‚¬Âº</Text>
+        <Text style={s.chevron}>{'>'}</Text>
       </View>
     </TouchableOpacity>
   );

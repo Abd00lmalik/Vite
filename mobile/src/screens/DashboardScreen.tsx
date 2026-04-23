@@ -41,10 +41,10 @@ export function DashboardScreen({ navigation }: any) {
   };
 
   const actions = [
-    { label: 'Register Patient', icon: 'Ã°Å¸â€˜Â¤', screen: 'Register', color: '#005EB8' },
-    { label: 'Record Vaccination', icon: 'Ã°Å¸â€™â€°', screen: 'Vaccinate', color: '#009900' },
-    { label: 'Sync to XION', icon: 'Ã¢ËœÂÃ¯Â¸Â', screen: 'Sync', color: '#F37021' },
-    { label: 'View Local Records', icon: 'Ã°Å¸â€œâ€¹', screen: 'Records', color: '#666666' },
+    { label: 'Register Patient', icon: '👤', screen: 'Register', color: '#005EB8' },
+    { label: 'Record Vaccination', icon: '💉', screen: 'Vaccinate', color: '#009900' },
+    { label: 'Sync to XION', icon: '☁️', screen: 'Sync', color: '#F37021' },
+    { label: 'View Local Records', icon: '📋', screen: 'Records', color: '#666666' },
   ] as const;
 
   return (

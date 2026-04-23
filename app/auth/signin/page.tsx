@@ -116,7 +116,7 @@ export default function SignInPage() {
         
         <div className="text-center">
            <Link href="/" className="text-xs text-ui-text-muted hover:text-who-blue transition-colors">
-             Ã¢â€ Â Back to Homepage
+             ← Back to Homepage
            </Link>
         </div>
       </div>

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cva } from 'class-variance-authority';
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ Backward-compatible buttonVariants for shadcn UI components Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ── Backward-compatible buttonVariants for shadcn UI components ── */
 export const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 rounded text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
   {
