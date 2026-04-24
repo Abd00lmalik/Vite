@@ -11,6 +11,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import { txFundProgram } from '@/lib/xion/contracts';
+import { toastErrorOnce } from '@/lib/utils/toastOnce';
 import type { Milestone, Program } from '@/types';
 
 interface DraftMilestone {
@@ -51,7 +52,7 @@ export function ProgramCreateForm() {
 
   const fundEscrow = async () => {
     if (!client || !account.bech32Address) {
-      toast.error('Please connect your XION account first');
+      toastErrorOnce('Please connect your XION account first', (message) => toast.error(message));
       return;
     }
     
@@ -63,7 +64,7 @@ export function ProgramCreateForm() {
       toast.success('Escrow funded successfully on-chain');
     } catch (error) {
       // Error is handled by UI toast
-      toast.error('Funding failed. Verify your balance.');
+      toastErrorOnce('Funding failed. Verify your balance.', (message) => toast.error(message));
     } finally {
       setFunding(false);
     }

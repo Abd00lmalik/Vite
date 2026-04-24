@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, ExternalLink, Link2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -13,6 +13,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useSyncStore } from '@/store/syncStore';
 import { isDemoAccount } from '@/lib/auth/demo';
 import { shortTxHash } from '@/lib/utils/format';
+import { getXionConfigStatus } from '@/lib/xion/readiness';
+import { toastErrorOnce } from '@/lib/utils/toastOnce';
 
 const STEP_LABELS: Record<SyncProgressUpdate['step'], string> = {
   1: 'Gathering pending records',
@@ -35,8 +37,20 @@ export function SyncPanel() {
   const isOnline = useOfflineStatus();
   const syncRef = useRef(false);
   const reduceMotion = useReducedMotion();
+  const configStatusRef = useRef<ReturnType<typeof getXionConfigStatus> | null>(null);
+  if (!configStatusRef.current) {
+    configStatusRef.current = getXionConfigStatus();
+  }
 
   const demoSession = isDemoAccount({ userId: session?.userId, demo: session?.demo });
+  const requiresOnchainSync = !demoSession;
+  const configStatus = configStatusRef.current!;
+  const configMissing = requiresOnchainSync && !configStatus.configReady;
+  const walletMissing =
+    requiresOnchainSync &&
+    configStatus.configReady &&
+    (!isConnected || !signingClient || !address);
+
   const clinicId = session?.clinicId ?? (session ? `clinic-${session.userId.slice(0, 6)}` : 'clinic-unknown');
 
   const pendingCount = useLiveQuery(async () => {
@@ -64,8 +78,14 @@ export function SyncPanel() {
 
   async function handleSync() {
     if (!session || isSyncing || syncRef.current || !isOnline || pendingCount === 0) return;
-    if (!demoSession && (!isConnected || !signingClient || !address)) {
-      toast.error('Connect your XION wallet before syncing real records.');
+    if (configMissing) {
+      toastErrorOnce(
+        'XION sync is not configured. Check your environment variables.',
+        (message) => toast.error(message)
+      );
+      return;
+    }
+    if (walletMissing) {
       return;
     }
 
@@ -94,7 +114,7 @@ export function SyncPanel() {
         const txSuffix = response.txHash ? ` Tx: ${shortTxHash(response.txHash)}` : '';
         toast.success(`${response.recordCount} records synced.${txSuffix}`);
       } else {
-        toast.error(response.errors[0] ?? 'Sync failed.');
+        toastErrorOnce(response.errors[0] ?? 'Sync failed.', (message) => toast.error(message));
       }
     } catch (error: any) {
       const message = error?.message ?? 'Sync failed.';
@@ -105,7 +125,7 @@ export function SyncPanel() {
         mode: demoSession ? 'simulated' : 'onchain',
         errors: [message],
       });
-      toast.error(message);
+      toastErrorOnce(message, (text) => toast.error(text));
     } finally {
       setSyncing(false);
       syncRef.current = false;
@@ -114,16 +134,17 @@ export function SyncPanel() {
     }
   }
 
-  useEffect(() => {
-    if (!isOnline || pendingCount === 0 || isSyncing) return;
-    if (!demoSession && !isConnected) return;
-
-    const timer = setTimeout(() => {
-      void handleSync();
-    }, 800);
-
-    return () => clearTimeout(timer);
-  }, [demoSession, isConnected, isOnline, isSyncing, pendingCount, session?.userId]);
+  const syncDisabled =
+    isSyncing || !isOnline || pendingCount === 0 || configMissing || walletMissing;
+  const syncDisabledReason = configMissing
+    ? 'XION sync requires environment configuration. See setup guide.'
+    : walletMissing
+    ? 'Connect your XION wallet to enable sync.'
+    : !isOnline
+    ? 'Device is offline.'
+    : pendingCount === 0
+    ? 'No pending records to sync.'
+    : '';
 
   return (
     <div className="mb-4 rounded-xl border border-ui-border bg-white p-4 shadow-sm">
@@ -136,17 +157,32 @@ export function SyncPanel() {
 
         <button
           onClick={() => void handleSync()}
-          disabled={isSyncing || !isOnline || pendingCount === 0}
+          disabled={syncDisabled}
+          title={syncDisabledReason}
           className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
         >
           {isSyncing ? 'Syncing...' : isOnline ? 'Sync to XION' : 'Offline'}
         </button>
       </div>
 
-      {!demoSession && !isConnected ? (
-        <p className="rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
-          Connect your XION wallet to sync real records.
+      {configMissing ? (
+        <p className="rounded border border-who-orange/20 bg-who-orange-light p-3 text-xs leading-relaxed text-who-orange">
+          <strong className="font-semibold">XION sync is not configured.</strong>
+          <br />
+          Missing: {configStatus.missingVars.join(', ')}
+          <br />
+          Offline registration and vaccination recording are unaffected.
         </p>
+      ) : null}
+
+      {walletMissing ? (
+        <p className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
+          Connect your XION wallet to enable sync.
+        </p>
+      ) : null}
+
+      {syncDisabledReason ? (
+        <p className="mt-2 text-xs text-ui-text-muted">{syncDisabledReason}</p>
       ) : null}
 
       {walletError ? (

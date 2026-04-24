@@ -11,6 +11,7 @@ import { TxSuccessCard } from '@/components/shared/TxSuccessCard';
 import { XionConnectButton } from '@/components/shared/XionConnectButton';
 import { Button } from '@/components/ui/button';
 import toast from 'react-hot-toast';
+import { toastErrorOnce } from '@/lib/utils/toastOnce';
 import type { Program } from '@/types';
 
 const schema = z.object({
@@ -50,7 +51,7 @@ export function FundingModal({ program, onClose, onSuccess }: Props) {
 
   async function onSubmit(data: FormData) {
     if (!signingClient || !address) {
-      toast.error('Please connect your XION account first');
+      toastErrorOnce('Please connect your XION account first', (message) => toast.error(message));
       return;
     }
 
@@ -90,7 +91,10 @@ export function FundingModal({ program, onClose, onSuccess }: Props) {
 
     } catch (err: any) {
       // Error is handled by UI toast
-      toast.error(err.message ?? 'Transaction failed. Check your balance and try again.');
+      toastErrorOnce(
+        err.message ?? 'Transaction failed. Check your balance and try again.',
+        (message) => toast.error(message)
+      );
       setStep('form');
     }
   }
