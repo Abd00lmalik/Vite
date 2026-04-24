@@ -10,6 +10,7 @@ import { useMounted } from '@/hooks/useMounted';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
+import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
 import { SyncPanel } from '@/components/shared/SyncPanel';
 import { NotificationBell } from '@/components/shared/NotificationBell';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
@@ -64,32 +65,32 @@ export function HWDashboard() {
 
   return (
     <main className="min-h-screen bg-ui-bg pb-24 font-sans">
-      <header className="sticky top-0 z-40 bg-who-blue text-white shadow-sm">
+      <header className="sticky top-0 z-40 border-b border-ui-border bg-white/90 shadow-sm backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <Image src="/logo.png" alt="Vite" width={32} height={32} className="rounded" />
             <div>
-              <p className="text-base font-bold leading-tight">{session.name}</p>
-              <p className="text-xs text-white/70">Health Worker - {clinicId}</p>
+              <p className="text-base font-bold leading-tight text-ui-text">{session.name}</p>
+              <p className="text-xs text-ui-text-muted">Health Worker | {clinicId}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <Link
               href="/how-it-works"
-              className="hidden items-center gap-1 text-sm font-medium text-white/80 transition-colors hover:text-white sm:inline-flex"
+              className="hidden items-center gap-1 text-sm font-medium text-ui-text-light transition-colors hover:text-who-blue sm:inline-flex"
             >
               <CircleHelp className="h-4 w-4" />
               Guide
             </Link>
-            <div className="hidden items-center gap-1.5 rounded bg-white/10 px-2 py-1 text-xs sm:flex">
+            <div className="hidden items-center gap-1.5 rounded-full border border-ui-border bg-ui-surface px-2.5 py-1 text-xs text-ui-text-light sm:flex">
               <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-who-green' : 'bg-who-orange'}`} />
               {isOnline ? 'ONLINE' : 'OFFLINE'}
             </div>
             <XionConnectButton compact />
             <NotificationBell />
             <button
-              className="text-sm font-medium text-white/80 transition-colors hover:text-white"
+              className="text-sm font-medium text-ui-text-light transition-colors hover:text-who-blue"
               onClick={() => {
                 logout();
                 router.push('/');
@@ -103,17 +104,38 @@ export function HWDashboard() {
 
       <section className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         {!isOnline && <OfflineBanner />}
+
+        <Card className="overflow-hidden p-0">
+          <div className="grid gap-0 md:grid-cols-[1.2fr_1fr]">
+            <div className="space-y-3 p-6">
+              <span className="badge-blue">Care delivery console</span>
+              <h2 className="text-2xl font-bold text-ui-text">Keep records accurate, even when connectivity is weak.</h2>
+              <p className="text-sm text-ui-text-light">
+                Register patients, capture vaccinations offline, and sync verified records when your device reconnects.
+              </p>
+            </div>
+            <div className="relative min-h-52 md:min-h-full">
+              <Image
+                src={UNSPLASH_IMAGES.dashboard.healthWorker}
+                alt="Nurse working in a modern clinic"
+                fill
+                className="object-cover"
+              />
+            </div>
+          </div>
+        </Card>
+
         <SyncPanel />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Link href="/health-worker/register">
-            <button className="flex w-full flex-col items-center justify-center gap-1 rounded-lg bg-who-blue py-6 text-lg font-bold text-white shadow-sm transition-all hover:bg-who-blue-dark">
+            <button className="flex w-full flex-col items-center justify-center gap-1 rounded-2xl bg-who-blue py-6 text-lg font-bold text-white shadow-soft transition-all hover:-translate-y-0.5 hover:bg-who-blue-dark">
               <span>+ Register Patient</span>
               <span className="text-xs font-normal uppercase tracking-widest opacity-80">New Enrollment</span>
             </button>
           </Link>
           <Link href="/health-worker/vaccinate">
-            <button className="flex w-full flex-col items-center justify-center gap-1 rounded-lg bg-who-green py-6 text-lg font-bold text-white shadow-sm transition-all hover:opacity-90">
+            <button className="flex w-full flex-col items-center justify-center gap-1 rounded-2xl bg-who-green py-6 text-lg font-bold text-white shadow-soft transition-all hover:-translate-y-0.5 hover:opacity-95">
               <span>Record Vaccination</span>
               <span className="text-xs font-normal uppercase tracking-widest opacity-80">Submit Dose</span>
             </button>

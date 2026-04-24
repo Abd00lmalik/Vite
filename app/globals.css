@@ -10,88 +10,104 @@
   * {
     box-sizing: border-box;
   }
+
   html {
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
-    color: #333333;
-    background-color: #F7F9FC;
+    text-rendering: optimizeLegibility;
+    color: #0f172a;
+    background-color: #f9fafb;
   }
+
   body {
     margin: 0;
-    padding: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 550px at 5% 0%, rgba(59, 130, 246, 0.08), transparent 55%),
+      radial-gradient(1000px 500px at 95% 0%, rgba(20, 184, 166, 0.08), transparent 52%),
+      #f9fafb;
   }
-  h1, h2, h3, h4, h5, h6 {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: #0f172a;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.75rem);
+    font-weight: 700;
+  }
+
+  h2 {
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
     font-weight: 600;
-    color: #333333;
-    line-height: 1.3;
   }
+
   p {
-    line-height: 1.6;
-    color: #666666;
+    color: #475569;
+    line-height: 1.7;
+    margin: 0;
   }
+
   a {
-    color: #005EB8;
+    color: inherit;
     text-decoration: none;
-  }
-  a:hover {
-    text-decoration: underline;
   }
 }
 
 @layer components {
-  /* ── Primary Button ── */
   .btn-primary {
-    @apply bg-who-blue text-white px-6 py-3 rounded font-semibold text-sm
-           hover:bg-who-blue-dark transition-colors duration-150
-           disabled:opacity-50 disabled:cursor-not-allowed
-           focus:outline-none focus:ring-2 focus:ring-who-blue focus:ring-offset-2;
+    @apply inline-flex items-center justify-center rounded-xl bg-who-blue px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:bg-who-blue-dark disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /* ── Secondary Button ── */
   .btn-secondary {
-    @apply bg-white text-who-blue border border-who-blue px-6 py-3 rounded
-           font-semibold text-sm hover:bg-who-blue-light transition-colors
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-xl border border-who-blue/25 bg-who-blue-light px-6 py-3 text-sm font-semibold text-who-blue transition-all duration-200 hover:border-who-blue/40 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /* ── Outline Button ── */
   .btn-outline {
-    @apply bg-white text-ui-text border border-ui-border px-6 py-3 rounded
-           font-medium text-sm hover:bg-ui-bg transition-colors;
+    @apply inline-flex items-center justify-center rounded-xl border border-ui-border bg-white px-6 py-3 text-sm font-medium text-ui-text transition-all duration-200 hover:border-who-blue/30 hover:bg-who-blue-light/40;
   }
 
-  /* ── Orange/Accent Button ── */
   .btn-accent {
-    @apply bg-who-orange text-white px-6 py-3 rounded font-semibold text-sm
-           hover:opacity-90 transition-opacity disabled:opacity-50;
+    @apply inline-flex items-center justify-center rounded-xl bg-who-green px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0f9f90] disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /* ── Card ── */
   .card {
-    @apply bg-white border border-ui-border rounded-lg shadow-card p-6;
+    @apply rounded-2xl border border-ui-border bg-white p-6 shadow-card;
   }
 
-  /* ── Stat Card ── */
   .stat-card {
-    @apply bg-white border border-ui-border rounded-lg p-5 shadow-card;
+    @apply rounded-2xl border border-ui-border bg-white p-5 shadow-card;
   }
 
-  /* ── Form Input ── */
   .input {
-    @apply w-full border border-ui-border rounded px-4 py-2.5 text-sm
-           text-ui-text bg-white focus:outline-none focus:ring-2
-           focus:ring-who-blue focus:border-who-blue transition-colors;
+    @apply h-12 w-full rounded-xl border border-ui-border bg-white px-4 text-base text-ui-text outline-none transition-all duration-200 placeholder:text-ui-text-muted focus:border-who-blue focus:ring-4 focus:ring-who-blue/15;
   }
 
-  /* ── Badge ── */
-  .badge-blue   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-blue-light text-who-blue; }
-  .badge-orange { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-orange-light text-who-orange; }
-  .badge-green  { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-green-light text-who-green; }
-  .badge-gray   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600; }
-  .badge-red    { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-who-red-light text-who-red; }
+  .badge-blue {
+    @apply inline-flex items-center rounded-full border border-who-blue/20 bg-who-blue-light px-2.5 py-1 text-xs font-semibold text-who-blue;
+  }
 
-  /* ── Section Header ── */
-  .section-header {
-    @apply border-b border-ui-border pb-4 mb-6;
+  .badge-orange {
+    @apply inline-flex items-center rounded-full border border-who-orange/20 bg-who-orange-light px-2.5 py-1 text-xs font-semibold text-who-orange;
+  }
+
+  .badge-green {
+    @apply inline-flex items-center rounded-full border border-who-green/20 bg-who-green-light px-2.5 py-1 text-xs font-semibold text-who-green;
+  }
+
+  .badge-gray {
+    @apply inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600;
+  }
+
+  .badge-red {
+    @apply inline-flex items-center rounded-full border border-who-red/20 bg-who-red-light px-2.5 py-1 text-xs font-semibold text-who-red;
   }
 }

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 interface CardProps {
   children: ReactNode;
@@ -7,50 +7,60 @@ interface CardProps {
 }
 
 export function Card({ children, className = '', padding = 'md' }: CardProps) {
-  const paddings = { none: '', sm: 'p-4', md: 'p-6', lg: 'p-8' };
+  const paddings = {
+    none: '',
+    sm: 'p-4',
+    md: 'p-6',
+    lg: 'p-8',
+  };
+
   return (
-    <div className={`bg-white border border-ui-border rounded-lg shadow-card
-                     ${paddings[padding]} ${className}`}>
+    <div
+      className={`rounded-2xl border border-ui-border bg-white shadow-card ${paddings[padding]} transition-shadow duration-200 hover:shadow-panel ${className}`}
+    >
       {children}
     </div>
   );
 }
 
 export function StatCard({
-  label, value, sub, icon, color = 'blue', className = ''
+  label,
+  value,
+  sub,
+  icon,
+  color = 'blue',
+  className = '',
 }: {
-  label: string; value: string | number; sub?: string;
-  icon?: ReactNode; color?: 'blue' | 'orange' | 'green' | 'gray';
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon?: ReactNode;
+  color?: 'blue' | 'orange' | 'green' | 'gray';
   className?: string;
 }) {
   const colors = {
-    blue:   'text-who-blue bg-who-blue-light',
-    orange: 'text-who-orange bg-who-orange-light',
-    green:  'text-who-green bg-who-green-light',
-    gray:   'text-gray-600 bg-gray-100',
+    blue: 'text-who-blue bg-who-blue-light border border-who-blue/20',
+    orange: 'text-who-orange bg-who-orange-light border border-who-orange/20',
+    green: 'text-who-green bg-who-green-light border border-who-green/20',
+    gray: 'text-gray-600 bg-gray-100 border border-gray-200',
   };
+
   return (
-    <div className={`stat-card ${className}`}>
-      <div className="flex items-start justify-between">
+    <div className={`rounded-2xl border border-ui-border bg-white p-5 shadow-card ${className}`}>
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-ui-text-light font-medium mb-1">{label}</p>
-          <p className="text-2xl font-bold text-ui-text">{value}</p>
-          {sub && <p className="text-xs text-ui-text-muted mt-1">{sub}</p>}
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ui-text-muted">{label}</p>
+          <p className="text-3xl font-bold tracking-tight text-ui-text">{value}</p>
+          {sub ? <p className="mt-2 text-xs text-ui-text-light">{sub}</p> : null}
         </div>
-        {icon && (
-          <div className={`p-2 rounded-lg ${colors[color]}`}>
-            {icon}
-          </div>
-        )}
+        {icon ? <div className={`rounded-xl p-2.5 ${colors[color]}`}>{icon}</div> : null}
       </div>
     </div>
   );
 }
 
-/* ── Compatibility wrappers for shadcn-style card API ── */
-
 export function CardHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`pb-4 ${className}`}>{children}</div>;
+  return <div className={`border-b border-ui-border pb-4 ${className}`}>{children}</div>;
 }
 
 export function CardTitle({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -62,13 +72,9 @@ export function CardContent({ children, className = '' }: { children: ReactNode;
 }
 
 export function CardDescription({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <p className={`text-sm text-ui-text-muted ${className}`}>{children}</p>;
+  return <p className={`text-sm text-ui-text-light ${className}`}>{children}</p>;
 }
 
 export function CardFooter({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`pt-4 ${className}`}>{children}</div>;
+  return <div className={`border-t border-ui-border pt-4 ${className}`}>{children}</div>;
 }
-
-
-
-

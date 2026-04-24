@@ -15,7 +15,7 @@ export function Select({ options, placeholder, className, ...props }: SelectProp
   return (
     <select
       className={cn(
-        'w-full border border-ui-border rounded px-4 py-2.5 text-sm text-ui-text bg-white focus:outline-none focus:ring-2 focus:ring-who-blue focus:border-who-blue transition-colors appearance-none',
+        'h-12 w-full appearance-none rounded-xl border border-ui-border bg-white px-4 text-base text-ui-text shadow-sm outline-none transition-all duration-200 focus:border-who-blue focus:ring-4 focus:ring-who-blue/15',
         className
       )}
       {...props}
