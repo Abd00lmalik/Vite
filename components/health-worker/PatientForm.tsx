@@ -15,6 +15,7 @@ import { captureGPS } from '@/lib/utils/gps';
 import { db } from '@/lib/db/schema';
 import { createPatient } from '@/lib/db/db';
 import { registerUser } from '@/lib/auth/session';
+import { isDemoAccount, isDemoProgram } from '@/lib/auth/demo';
 import { SMS } from '@/lib/notifications/sms';
 import { useAuthStore } from '@/store/authStore';
 
@@ -37,7 +38,34 @@ export function PatientForm() {
   const [createdHealthId, setCreatedHealthId] = useState<string | null>(null);
   const [createdPatientName, setCreatedPatientName] = useState<string | null>(null);
 
-  const programs = useLiveQuery(() => db.programs.where('status').equals('active').toArray(), []);
+  const programs = useLiveQuery(async () => {
+    if (!session?.userId) return [];
+
+    const activePrograms = await db.programs.where('status').equals('active').toArray();
+    const demoAccount = isDemoAccount({ userId: session.userId, demo: session.demo });
+
+    if (demoAccount) {
+      return activePrograms;
+    }
+
+    const clinic = session.clinicId ? await db.clinics.get(session.clinicId) : undefined;
+    const clinicScopes = [clinic?.state, clinic?.lga, clinic?.location]
+      .filter(Boolean)
+      .map((value) => value!.toLowerCase());
+
+    return activePrograms.filter((program) => {
+      if (isDemoProgram(program)) return false;
+
+      if (program.enrollmentType === 'open enrollment') return true;
+
+      const scope = program.geographicScope.map((item) => item.toLowerCase());
+      if (scope.includes('national')) return true;
+      if (scope.includes('state') && !!clinic?.state) return true;
+      if (scope.includes('lga') && !!clinic?.lga) return true;
+
+      return clinicScopes.some((item) => scope.includes(item));
+    });
+  }, [session?.userId, session?.demo, session?.clinicId]);
 
   const {
     register,
@@ -245,6 +273,12 @@ export function PatientForm() {
                   <option key={program.id} value={program.id}>{program.name}</option>
                 ))}
               </select>
+              {!isDemoAccount({ userId: session?.userId, demo: session?.demo }) &&
+              (programs ?? []).length === 0 ? (
+                <p className="mt-1 text-xs text-ui-text-muted">
+                  No eligible programs are available yet for this clinic.
+                </p>
+              ) : null}
             </div>
 
             {selectedProgram ? (

@@ -12,6 +12,8 @@ export interface User {
   clinicId?: string;
   clinicName?: string;
   organizationName?: string;
+  walletAddress?: string;
+  walletConnectedAt?: string;
   idVerificationField?: string;
   roleTitle?: string;
   programPreferences?: string[];
@@ -84,6 +86,7 @@ export interface VaccinationRecord {
   gpsLng: number;
   syncStatus: SyncStatus;
   xionTxHash?: string;
+  xionBlockHeight?: number;
   milestoneTriggered?: string;
   notes?: string;
   createdAt: string;
@@ -177,6 +180,7 @@ export interface SyncBatch {
   status: 'pending' | 'submitted' | 'confirmed' | 'failed';
   submittedAt?: string;
   xionTxHash?: string;
+  blockHeight?: number;
   recordCount: number;
 }
 
@@ -213,6 +217,7 @@ export interface SyncResult {
   batchId: string;
   recordCount: number;
   txHash?: string;
+  blockHeight?: number;
   explorerUrl?: string;
   merkleRoot: string;
   grantsReleased: number;

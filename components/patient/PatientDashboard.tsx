@@ -11,10 +11,12 @@ import { Card } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { usePatient } from '@/hooks/usePatient';
+import { useXion } from '@/hooks/useXion';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
 import { NotificationBell } from '@/components/shared/NotificationBell';
+import { PageTransition } from '@/components/shared/PageTransition';
 import { QRDisplay } from '@/components/shared/QRDisplay';
 import { QRScanner } from '@/components/shared/QRScanner';
 import { EarningsCard } from './EarningsCard';
@@ -28,6 +30,7 @@ export function PatientDashboard() {
   const { session } = useAuth('patient');
   const { patient, vaccinations, grants, lookup, error } = usePatient();
   const logout = useAuthStore((state) => state.logout);
+  const { disconnect } = useXion();
   const router = useRouter();
   const [showRedeem, setShowRedeem] = useState(false);
   const [lookupValue, setLookupValue] = useState('');
@@ -71,6 +74,7 @@ export function PatientDashboard() {
               <button
                 className="text-ui-text-light hover:text-who-blue transition-colors text-sm font-medium"
                 onClick={() => {
+                  disconnect();
                   logout();
                   router.push('/');
                 }}
@@ -82,7 +86,7 @@ export function PatientDashboard() {
         </div>
       </header>
 
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <PageTransition className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <Card className="overflow-hidden p-0">
           <div className="grid gap-0 md:grid-cols-[1.2fr_1fr]">
             <div className="space-y-3 p-6">
@@ -183,7 +187,7 @@ export function PatientDashboard() {
           <h3 className="text-sm font-semibold text-ui-text mb-4 uppercase tracking-wider">Health Milestone Status</h3>
           <MilestoneTracker milestones={program?.milestones ?? []} records={vaccinations} />
         </Card>
-      </section>
+      </PageTransition>
     </main>
   );
 }

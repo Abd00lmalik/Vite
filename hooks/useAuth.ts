@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { isSessionExpired } from '@/lib/auth/session';
 import { roleHome } from '@/lib/auth/guards';
+import { clearScopedWalletState } from '@/lib/xion/walletState';
 import type { UserRole } from '@/types';
 
 export function useAuth(requiredRole?: UserRole) {
@@ -13,6 +14,9 @@ export function useAuth(requiredRole?: UserRole) {
 
   useEffect(() => {
     if (!isAuthenticated || !session || isSessionExpired(session)) {
+      if (session?.userId) {
+        clearScopedWalletState(session.userId);
+      }
       logout();
       router.replace('/auth/signin');
       return;

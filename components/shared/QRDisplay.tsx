@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { QRCodeSVG } from 'qrcode.react';
 import { buildRecordUrl } from '@/lib/utils/qr';
@@ -18,6 +19,7 @@ function maskLink(value: string) {
 
 export function QRDisplay({ healthDropId, patientName, size = 240, beneficiary }: QRDisplayProps) {
   const [mounted, setMounted] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     setMounted(true);
@@ -75,7 +77,7 @@ export function QRDisplay({ healthDropId, patientName, size = 240, beneficiary }
         await navigator.share({
           title: 'VITE Health Record',
           text: `Health ID: ${healthDropId}`,
-          url: value,
+          url: recordUrl,
         });
         return;
       }
@@ -88,7 +90,12 @@ export function QRDisplay({ healthDropId, patientName, size = 240, beneficiary }
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 text-center shadow-sm">
+    <motion.div
+      initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: reduceMotion ? 0.01 : 0.24, ease: 'easeOut' }}
+      className="rounded-xl border border-gray-200 bg-white p-4 text-center shadow-sm"
+    >
       <div className="inline-flex rounded-lg bg-white p-2">
         <QRCodeSVG id={svgId} value={value} size={Math.max(size, 240)} includeMargin />
       </div>
@@ -112,7 +119,7 @@ export function QRDisplay({ healthDropId, patientName, size = 240, beneficiary }
           Share QR Link
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

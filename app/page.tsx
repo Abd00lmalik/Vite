@@ -1,15 +1,10 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, ShieldCheck, Syringe, Wallet } from 'lucide-react';
 import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
-
-const pageVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.45 } },
-};
 
 const countryRibbon = [
   'Nigeria',
@@ -61,6 +56,16 @@ const statsRight = [
 ];
 
 export default function HomePage() {
+  const reduceMotion = useReducedMotion();
+  const pageVariants: Variants = {
+    hidden: { opacity: 0, y: reduceMotion ? 0 : 12 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: reduceMotion ? 0.01 : 0.28, ease: [0.22, 1, 0.36, 1] },
+    },
+  };
+
   return (
     <div className="min-h-screen bg-brand-bg">
       <header className="sticky top-0 z-50 border-b border-ui-border/80 bg-white/90 backdrop-blur-lg">
@@ -84,6 +89,18 @@ export default function HomePage() {
       </header>
 
       <section className="relative overflow-hidden bg-hero-gradient">
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-who-blue/20 blur-3xl"
+          animate={reduceMotion ? undefined : { x: [0, 24, 0], y: [0, 16, 0] }}
+          transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-20 right-[-5rem] h-72 w-72 rounded-full bg-who-green/20 blur-3xl"
+          animate={reduceMotion ? undefined : { x: [0, -18, 0], y: [0, -10, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+        />
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 md:py-20 lg:grid-cols-2 lg:items-center lg:px-8 lg:py-24">
           <motion.div initial="hidden" animate="visible" variants={pageVariants} className="space-y-6">
             <span className="badge-blue">Trusted immunization and grant verification</span>
@@ -132,7 +149,7 @@ export default function HomePage() {
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.4 }}
+          transition={{ duration: reduceMotion ? 0.01 : 0.35 }}
         >
           <span>VITE operates across</span>
           {countryRibbon.map((country, index) => (

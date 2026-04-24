@@ -121,10 +121,11 @@ export async function getPendingPatients(clinicId?: string): Promise<Patient[]> 
   return db.patients.where('syncStatus').equals('pending').toArray();
 }
 
-export async function markVaccinationSynced(id: string, txHash: string): Promise<void> {
+export async function markVaccinationSynced(id: string, txHash: string, blockHeight?: number): Promise<void> {
   await db.vaccinations.update(id, {
     syncStatus: 'synced',
     xionTxHash: txHash,
+    ...(blockHeight ? { xionBlockHeight: blockHeight } : {}),
   });
 }
 

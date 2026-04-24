@@ -4,6 +4,7 @@ const withPWA = withPWAInit({
   dest: 'public',
   register: true,
   skipWaiting: true,
+  maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
   // PWA is intentionally disabled in development to improve build speeds and avoid service worker caching issues.
   disable: process.env.NODE_ENV === 'development',
 });

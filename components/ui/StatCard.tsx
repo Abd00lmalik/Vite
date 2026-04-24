@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/utils/cn';
 
 interface StatCardProps {
@@ -28,6 +28,7 @@ export function StatCard({
   color = 'teal',
   animate = true,
 }: StatCardProps) {
+  const reduceMotion = useReducedMotion();
   const card = (
     <div className={cn('rounded-xl border border-gray-200 border-t-4 bg-white p-4 shadow-sm', colorMap[color])}>
       <div className="mb-2 flex items-start justify-between">
@@ -44,7 +45,11 @@ export function StatCard({
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+    <motion.div
+      initial={{ opacity: 0, y: reduceMotion ? 0 : 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduceMotion ? 0.01 : 0.35 }}
+    >
       {card}
     </motion.div>
   );

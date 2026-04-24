@@ -16,6 +16,7 @@ import { Select } from '@/components/ui/select';
 import { sendSMS } from '@/lib/notifications/sms';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { CLINIC_LOCATIONS } from '@/lib/data/clinicLocations';
+import { isDemoAccount, isDemoClinic } from '@/lib/auth/demo';
 import { FundingModal } from '@/components/donor/FundingModal';
 
 export default function ProgramDetailPage() {
@@ -46,7 +47,14 @@ export default function ProgramDetailPage() {
     if (!enrolledIds.length) return [];
     return db.grantReleases.where('patientId').anyOf(enrolledIds).toArray();
   }, [patients]);
-  const clinics = useLiveQuery(() => db.clinics.toArray(), []);
+  const clinics = useLiveQuery(async () => {
+    const allClinics = await db.clinics.toArray();
+    if (!session) return allClinics;
+    if (isDemoAccount({ userId: session.userId, demo: session.demo })) {
+      return allClinics;
+    }
+    return allClinics.filter((clinic) => !isDemoClinic(clinic));
+  }, [session?.userId, session?.demo]);
 
   if (!mounted) return <PageSkeleton />;
 

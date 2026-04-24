@@ -22,9 +22,7 @@ export async function sendSMS(
   };
 
   // Log to IndexedDB for demo visibility
-  await db.smsLogs.add(log);
-
-  console.log(`[SMS Notification] To: ${to} | Type: ${type} | Message: ${message}`);
+  await db.smsLogs.put(log);
   return log;
 }
 

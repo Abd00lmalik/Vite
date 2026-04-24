@@ -15,6 +15,7 @@ import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
 import { useXion } from '@/hooks/useXion';
+import { isDemoAccount } from '@/lib/auth/demo';
 import { queryProgramBalance } from '@/lib/xion/contracts';
 import { shortTxHash } from '@/lib/utils/format';
 import { NotificationBell } from '@/components/shared/NotificationBell';
@@ -29,7 +30,9 @@ import { ReportExporter } from './ReportExporter';
 import { AuditLogTable } from './AuditLogTable';
 import { FundingModal } from './FundingModal';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
+import { PageTransition } from '@/components/shared/PageTransition';
 import type { Program } from '@/types';
+import type { CoverageHeatmapItem } from './CoverageHeatmap';
 
 const MilestoneProgressChart = dynamic(
   () => import('./MilestoneProgressChart').then((mod) => mod.MilestoneProgressChart),
@@ -50,23 +53,32 @@ export function DonorDashboard() {
   const { session } = useAuth('donor');
   const logout = useAuthStore((state) => state.logout);
   const router = useRouter();
-  const { isConnected } = useXion();
+  const { isConnected, disconnect } = useXion();
   const { client: queryClient } = useAbstraxionClient();
 
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('overview');
   const [fundingProgram, setFundingProgram] = useState<Program | null>(null);
+  const demoAccount = isDemoAccount({ userId: session?.userId, demo: session?.demo });
 
   const programs =
     useLiveQuery<Program[]>(
       () => (session ? db.programs.where('donorId').equals(session.userId).toArray() : Promise.resolve<Program[]>([])),
-      [session?.userId]
-    ) ?? [];
+    [session?.userId]
+  ) ?? [];
+
+  const clinics = useLiveQuery(() => db.clinics.toArray(), []);
 
   const patients = useLiveQuery(async () => {
     const programIds = programs.map((program) => program.id);
     if (!programIds.length) return [];
     return db.patients.where('programId').anyOf(programIds).toArray();
   }, [programs.map((program) => program.id).join('|')]);
+
+  const vaccinations = useLiveQuery(async () => {
+    const patientIds = (patients ?? []).map((patient) => patient.id);
+    if (!patientIds.length) return [];
+    return db.vaccinations.where('patientId').anyOf(patientIds).toArray();
+  }, [patients?.map((patient) => patient.id).join('|')]);
 
   const grants = useLiveQuery(async () => {
     const patientIds = (patients ?? []).map((patient) => patient.id);
@@ -135,6 +147,62 @@ export function DonorDashboard() {
     [patients, programs, totalEscrow, totalReleased]
   );
 
+  const weeklyReleaseSeries = useMemo(() => {
+    const rows = grants ?? [];
+    const grouped = new Map<string, number>();
+    for (const item of rows) {
+      if (!item.releasedAt) continue;
+      const date = new Date(item.releasedAt);
+      const key = `${date.getUTCFullYear()}-W${Math.ceil((date.getUTCDate() + 6 - date.getUTCDay()) / 7)}`;
+      grouped.set(key, (grouped.get(key) ?? 0) + item.amount);
+    }
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-8)
+      .map(([week, released]) => ({ week, released }));
+  }, [grants]);
+
+  const regionalCoverage: CoverageHeatmapItem[] = useMemo(() => {
+    if (!patients?.length || !vaccinations?.length) return [];
+    const clinicById = new Map((clinics ?? []).map((clinic) => [clinic.id, clinic]));
+    const grouped = new Map<string, { vaccinated: number; total: number }>();
+
+    for (const patient of patients) {
+      const clinic = clinicById.get(patient.clinicId);
+      const region =
+        clinic?.state ??
+        clinic?.location?.split(',')[0]?.trim() ??
+        patient.clinicName ??
+        patient.clinicId;
+      const patientRecords = vaccinations.filter((record) => record.patientId === patient.id);
+      const syncedRecords = patientRecords.filter((record) => record.syncStatus === 'synced').length;
+      const current = grouped.get(region) ?? { vaccinated: 0, total: 0 };
+      current.vaccinated += syncedRecords;
+      current.total += patientRecords.length;
+      grouped.set(region, current);
+    }
+
+    return Array.from(grouped.entries()).map(([state, value]) => ({
+      state,
+      vaccinated: value.vaccinated,
+      total: value.total,
+      coverage: value.total > 0 ? Math.round((value.vaccinated / value.total) * 100) : 0,
+    }));
+  }, [clinics, patients, vaccinations]);
+
+  const demoRegionalSample: CoverageHeatmapItem[] = useMemo(
+    () => [
+      { state: 'Kano', coverage: 74, vaccinated: 74, total: 100 },
+      { state: 'Oyo', coverage: 68, vaccinated: 68, total: 100 },
+      { state: 'Lagos', coverage: 71, vaccinated: 71, total: 100 },
+      { state: 'Abuja', coverage: 66, vaccinated: 66, total: 100 },
+      { state: 'Kaduna', coverage: 62, vaccinated: 62, total: 100 },
+      { state: 'Enugu', coverage: 59, vaccinated: 59, total: 100 },
+    ],
+    []
+  );
+
   if (!mounted || !session) return <PageSkeleton />;
 
   const firstProgram = programs[0];
@@ -160,6 +228,7 @@ export function DonorDashboard() {
             <button
               className="text-sm font-medium text-ui-text-light transition-colors hover:text-who-blue"
               onClick={() => {
+                disconnect();
                 logout();
                 router.push('/');
               }}
@@ -170,7 +239,7 @@ export function DonorDashboard() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      <PageTransition className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Total Enrolled" value={metrics.enrolled} color="blue" />
           <StatCard label="Milestones Met" value={metrics.milestonesComplete} color="green" />
@@ -258,13 +327,20 @@ export function DonorDashboard() {
                     escrowBalance={metrics.escrowBalance}
                     enrolledPatients={metrics.enrolled}
                     milestonesComplete={metrics.milestonesComplete}
+                    weeklySeries={weeklyReleaseSeries}
+                    loading={grants === undefined}
+                    sampleData={demoAccount && weeklyReleaseSeries.length === 0}
                   />
                 </Card>
               </div>
 
               <Card>
                 <p className="mb-6 text-sm font-semibold text-ui-text-light">Regional Coverage Insight</p>
-                <CoverageHeatmap />
+                <CoverageHeatmap
+                  data={regionalCoverage.length ? regionalCoverage : demoAccount ? demoRegionalSample : []}
+                  loading={patients === undefined || vaccinations === undefined}
+                  sampleData={demoAccount && regionalCoverage.length === 0}
+                />
               </Card>
             </div>
           ) : null}
@@ -379,7 +455,7 @@ export function DonorDashboard() {
             </Card>
           ) : null}
         </div>
-      </section>
+      </PageTransition>
 
       {fundingProgram ? (
         <FundingModal

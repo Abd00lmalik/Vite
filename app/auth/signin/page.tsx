@@ -3,15 +3,17 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { RoleSelector, type RoleChoice } from '@/components/auth/RoleSelector';
 import { PatientLoginForm } from '@/components/auth/PatientLoginForm';
 import { StaffLoginForm } from '@/components/auth/StaffLoginForm';
 import { Card } from '@/components/ui/card';
+import { PageTransition } from '@/components/shared/PageTransition';
 import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
 
 export default function SignInPage() {
   const [role, setRole] = useState<RoleChoice | null>(null);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     const roleParam = new URLSearchParams(window.location.search).get('role');
@@ -22,7 +24,7 @@ export default function SignInPage() {
 
   return (
     <main className="min-h-screen bg-brand-bg px-4 py-8 md:py-12">
-      <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.1fr_1fr]">
+      <PageTransition className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.1fr_1fr]">
         <section className="relative hidden overflow-hidden rounded-3xl border border-ui-border bg-card-gradient p-8 shadow-card lg:flex lg:flex-col lg:justify-between">
           <div className="space-y-5">
             <span className="badge-blue">Secure healthcare access</span>
@@ -70,10 +72,10 @@ export default function SignInPage() {
               {role ? (
                 <motion.div
                   key={role}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: reduceMotion ? 0 : 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
+                  exit={{ opacity: 0, y: reduceMotion ? 0 : -10 }}
+                  transition={{ duration: reduceMotion ? 0.01 : 0.2 }}
                   className="space-y-4"
                 >
                   <div className="flex items-center justify-between border-b border-ui-border pb-3">
@@ -113,7 +115,7 @@ export default function SignInPage() {
             </p>
           </Card>
         </section>
-      </div>
+      </PageTransition>
     </main>
   );
 }

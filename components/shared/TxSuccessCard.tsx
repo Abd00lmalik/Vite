@@ -2,8 +2,8 @@ import { CheckCircle, ExternalLink } from 'lucide-react';
 import { explorerTxUrl } from '@/lib/xion/config';
 
 interface TxSuccessCardProps {
-  txHash:  string;
-  title:   string;
+  txHash: string;
+  title: string;
   details?: { label: string; value: string }[];
 }
 
@@ -34,19 +34,15 @@ export function TxSuccessCard({ txHash, title, details = [] }: TxSuccessCardProp
         href={explorerTxUrl(txHash)}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 text-sm text-who-blue
-                   font-medium hover:underline"
+        className="inline-flex items-center gap-2 text-sm text-who-blue font-medium hover:underline"
       >
         View on XION Explorer
         <ExternalLink className="h-3.5 w-3.5" />
       </a>
 
       <p className="text-xs text-ui-text-muted mt-3">
-        Transaction confirmed on XION testnet-2 · Powered by Abstraxion
+        Transaction confirmed on XION testnet-2 - Powered by Abstraxion
       </p>
     </div>
   );
 }
-
-
-

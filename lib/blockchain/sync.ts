@@ -1,12 +1,14 @@
 import { v4 as uuidv4 } from 'uuid';
 import { buildMerkleTree } from '@/lib/utils/merkle';
 import { db } from '@/lib/db/schema';
-import { explorerTxUrl } from '@/lib/xion/config';
+import { explorerTxUrl, isConfigured, XION_RUNTIME } from '@/lib/xion/config';
 import { txCheckAndRelease, txSubmitBatch } from '@/lib/xion/contracts';
 import { getPendingPatients, getPendingVaccinations, markPatientSynced, markVaccinationSynced } from '@/lib/db/db';
 import { SMS } from '@/lib/notifications/sms';
 import { scheduleReminder } from '@/lib/notifications/reminders';
 import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
+import { isDemoSession } from '@/lib/auth/demo';
+import { checkXionAccountPreflight, hasEnoughSyncGas, requiredSyncGasUxion } from '@/lib/xion/preflight';
 import type { SyncResult } from '@/types';
 
 export interface SyncProgressUpdate {
@@ -19,12 +21,82 @@ function mockTxHash(seed: string): string {
   return `0x${raw.padEnd(64, 'a').slice(0, 64)}`;
 }
 
-function canUseOnChain(signingClient: any, senderAddress: string): boolean {
-  return Boolean(signingClient && senderAddress);
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string') return error;
+  return JSON.stringify(error);
+}
+
+function mapSyncError(error: unknown, senderAddress?: string): string {
+  const raw = normalizeErrorMessage(error);
+  const message = raw.toLowerCase();
+
+  if (
+    message.includes('failed to fetch') ||
+    message.includes('networkerror') ||
+    message.includes('network request failed') ||
+    message.includes('timeout') ||
+    message.includes('econn')
+  ) {
+    return 'Could not reach XION network. Check your connection.';
+  }
+
+  if (message.includes('account') && message.includes('not found')) {
+    const suffix = senderAddress ? `\nWallet: ${senderAddress}` : '';
+    return `Your XION wallet account has not been initialized on-chain. Please send a small amount of UXION to your wallet address to activate it before syncing.${suffix}`;
+  }
+
+  if (
+    message.includes('insufficient') &&
+    (message.includes('uxion') || message.includes('gas') || message.includes('fee') || message.includes('fund'))
+  ) {
+    return 'Insufficient UXION balance for gas fees.';
+  }
+
+  if (message.includes('rpc error') || message.includes('contract')) {
+    return `Contract error: ${raw}`;
+  }
+
+  return `Unknown sync error: ${raw}`;
+}
+
+function failureResult({
+  batchId,
+  recordCount,
+  merkleRoot,
+  txHash,
+  grantsReleased,
+  flaggedCount,
+  mode,
+  errors,
+  blockHeight,
+}: {
+  batchId: string;
+  recordCount: number;
+  merkleRoot: string;
+  txHash?: string;
+  grantsReleased?: number;
+  flaggedCount?: number;
+  mode: 'onchain' | 'simulated';
+  errors: string[];
+  blockHeight?: number;
+}): SyncResult {
+  return {
+    success: false,
+    batchId,
+    recordCount,
+    txHash,
+    blockHeight,
+    merkleRoot,
+    grantsReleased: grantsReleased ?? 0,
+    errors,
+    flaggedCount,
+    mode,
+  };
 }
 
 export async function runSync(
-  session: { userId: string; role: string; clinicId?: string },
+  session: { userId: string; role: string; clinicId?: string; demo?: boolean },
   signingClient: any,
   senderAddress: string,
   onProgress?: (update: SyncProgressUpdate) => void
@@ -34,7 +106,8 @@ export async function runSync(
   let flaggedCount = 0;
 
   const clinicId = session.clinicId ?? `clinic-${session.userId.slice(0, 6)}`;
-  const onChain = canUseOnChain(signingClient, senderAddress);
+  const demoAccount = Boolean(session.demo) || isDemoSession({ userId: session.userId } as any);
+  const onChain = !demoAccount;
 
   onProgress?.({ step: 1, message: 'Gathering pending records...' });
   const [pendingVaccinations, pendingPatients] = await Promise.all([
@@ -53,6 +126,64 @@ export async function runSync(
       flaggedCount: 0,
       mode: onChain ? 'onchain' : 'simulated',
     };
+  }
+
+  if (onChain) {
+    if (!XION_RUNTIME.useRealXion || !isConfigured()) {
+      return failureResult({
+        batchId: 'config-missing',
+        recordCount: pendingVaccinations.length,
+        merkleRoot: '0x0',
+        mode: 'onchain',
+        errors: ['XION configuration is incomplete. Please set all required NEXT_PUBLIC_XION_* variables.'],
+      });
+    }
+
+    if (!signingClient || !senderAddress) {
+      return failureResult({
+        batchId: 'wallet-disconnected',
+        recordCount: pendingVaccinations.length,
+        merkleRoot: '0x0',
+        mode: 'onchain',
+        errors: ['Wallet is not connected. Connect your XION account before syncing.'],
+      });
+    }
+
+    onProgress?.({ step: 2, message: 'Checking wallet status on XION...' });
+    try {
+      const accountPreflight = await checkXionAccountPreflight(senderAddress);
+      if (!accountPreflight.accountFound) {
+        return failureResult({
+          batchId: 'account-not-found',
+          recordCount: pendingVaccinations.length,
+          merkleRoot: '0x0',
+          mode: 'onchain',
+          errors: [
+            `Your XION wallet account has not been initialized on-chain. Please send a small amount of UXION to your wallet address to activate it before syncing.\nWallet: ${senderAddress}`,
+          ],
+        });
+      }
+
+      if (!hasEnoughSyncGas(accountPreflight.balanceUxion)) {
+        return failureResult({
+          batchId: 'insufficient-gas',
+          recordCount: pendingVaccinations.length,
+          merkleRoot: '0x0',
+          mode: 'onchain',
+          errors: [
+            `Insufficient UXION balance for gas fees. Minimum required: ${requiredSyncGasUxion().toString()} uxion. Current: ${accountPreflight.balanceUxion.toString()} uxion.`,
+          ],
+        });
+      }
+    } catch (error) {
+      return failureResult({
+        batchId: 'preflight-failed',
+        recordCount: pendingVaccinations.length,
+        merkleRoot: '0x0',
+        mode: 'onchain',
+        errors: [mapSyncError(error, senderAddress)],
+      });
+    }
   }
 
   const lotRegistry = new Set(INITIAL_VACCINE_LOTS.map((lot) => lot.lotNumber));
@@ -78,14 +209,15 @@ export async function runSync(
     };
   }
 
-  onProgress?.({ step: 2, message: 'Building cryptographic proof...' });
+  onProgress?.({ step: 3, message: 'Building cryptographic proof...' });
   const { root } = buildMerkleTree(validVaccinations);
   const batchId = uuidv4();
 
-  onProgress?.({ step: 3, message: onChain ? 'Broadcasting to XION...' : 'Running simulated sync...' });
+  onProgress?.({ step: 4, message: onChain ? 'Broadcasting to XION...' : 'Running demo sync...' });
 
   let txHash = mockTxHash(batchId);
   let explorerUrl: string | undefined;
+  let blockHeight: number | undefined;
 
   if (onChain) {
     try {
@@ -99,24 +231,24 @@ export async function runSync(
       );
       txHash = tx.txHash;
       explorerUrl = tx.explorerUrl;
+      blockHeight = tx.height;
     } catch (error: any) {
-      errors.push(`Batch submission failed: ${error?.message ?? 'Unknown on-chain error'}`);
-      return {
-        success: false,
+      errors.push(mapSyncError(error, senderAddress));
+      return failureResult({
         batchId,
         recordCount: validVaccinations.length,
-        txHash,
         merkleRoot: root,
-        grantsReleased: 0,
+        txHash,
+        blockHeight,
         errors,
         flaggedCount,
         mode: 'onchain',
-      };
+      });
     }
   }
 
   for (const record of validVaccinations) {
-    await markVaccinationSynced(record.id, txHash);
+    await markVaccinationSynced(record.id, txHash, blockHeight);
   }
 
   for (const patient of pendingPatients) {
@@ -131,10 +263,11 @@ export async function runSync(
     status: onChain ? 'confirmed' : 'submitted',
     submittedAt: new Date().toISOString(),
     xionTxHash: txHash,
+    blockHeight,
     recordCount: validVaccinations.length,
   });
 
-  onProgress?.({ step: 4, message: 'Verifying milestones and releasing grants...' });
+  onProgress?.({ step: 5, message: 'Verifying milestones and releasing grants...' });
 
   for (const record of validVaccinations) {
     try {
@@ -207,17 +340,15 @@ export async function runSync(
         await scheduleReminder(patient, nextMilestone, dueDate.toISOString());
       }
     } catch (error: any) {
-      errors.push(`Milestone processing failed for ${record.id}: ${error?.message ?? 'Unknown error'}`);
+      errors.push(`Milestone processing failed for ${record.id}: ${mapSyncError(error, senderAddress)}`);
     }
   }
-
-  onProgress?.({ step: 5, message: 'Finalizing audit trail...' });
 
   await db.auditLogs.put({
     id: uuidv4(),
     entityId: batchId,
     entityType: 'sync-batch',
-    action: `Synced ${validVaccinations.length} records (${onChain ? 'on-chain' : 'simulated'}). Root: ${root}. Tx: ${txHash}. Grants: $${grantsReleased}`,
+    action: `Synced ${validVaccinations.length} records (${onChain ? 'on-chain' : 'simulated'}). Root: ${root}. Tx: ${txHash}${blockHeight ? ` @ ${blockHeight}` : ''}. Grants: $${grantsReleased}`,
     performedBy: onChain ? senderAddress : session.userId,
     timestamp: new Date().toISOString(),
   });
@@ -227,6 +358,7 @@ export async function runSync(
     batchId,
     recordCount: validVaccinations.length,
     txHash,
+    blockHeight,
     explorerUrl: explorerUrl ?? explorerTxUrl(txHash),
     merkleRoot: root,
     grantsReleased,

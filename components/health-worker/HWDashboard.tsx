@@ -8,6 +8,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth } from '@/hooks/useAuth';
 import { useMounted } from '@/hooks/useMounted';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
+import { useXion } from '@/hooks/useXion';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
@@ -16,6 +17,7 @@ import { NotificationBell } from '@/components/shared/NotificationBell';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 import { XionConnectButton } from '@/components/shared/XionConnectButton';
 import { Card, StatCard } from '@/components/ui/card';
+import { PageTransition } from '@/components/shared/PageTransition';
 import { ClinicStatsBar } from './ClinicStatsBar';
 import { RecentPatientsList } from './RecentPatientsList';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
@@ -24,6 +26,7 @@ export function HWDashboard() {
   const mounted = useMounted();
   const { session } = useAuth('health-worker');
   const logout = useAuthStore((state) => state.logout);
+  const { disconnect } = useXion();
   const router = useRouter();
   const isOnline = useOfflineStatus();
 
@@ -92,6 +95,7 @@ export function HWDashboard() {
             <button
               className="text-sm font-medium text-ui-text-light transition-colors hover:text-who-blue"
               onClick={() => {
+                disconnect();
                 logout();
                 router.push('/');
               }}
@@ -102,7 +106,7 @@ export function HWDashboard() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      <PageTransition className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         {!isOnline && <OfflineBanner />}
 
         <Card className="overflow-hidden p-0">
@@ -157,7 +161,7 @@ export function HWDashboard() {
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-ui-text">Recent Patient Registrations</h3>
           <RecentPatientsList workerId={session.userId} />
         </Card>
-      </section>
+      </PageTransition>
     </main>
   );
 }

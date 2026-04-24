@@ -3,16 +3,18 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { RoleSelector, type RoleChoice } from '@/components/auth/RoleSelector';
 import { DonorSignupForm } from '@/components/auth/DonorSignupForm';
 import { HealthWorkerSignupForm } from '@/components/auth/HealthWorkerSignupForm';
 import { PatientSignupForm } from '@/components/auth/PatientSignupForm';
 import { Card } from '@/components/ui/card';
+import { PageTransition } from '@/components/shared/PageTransition';
 import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
 
 export default function SignUpPage() {
   const [role, setRole] = useState<RoleChoice | null>(null);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     const roleParam = new URLSearchParams(window.location.search).get('role');
@@ -23,7 +25,7 @@ export default function SignUpPage() {
 
   return (
     <main className="min-h-screen bg-brand-bg px-4 py-8 md:py-12">
-      <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1fr_1.1fr]">
+      <PageTransition className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1fr_1.1fr]">
         <section className="space-y-5">
           <div className="flex items-center justify-between">
             <Link href="/" className="inline-flex items-center gap-2">
@@ -54,10 +56,10 @@ export default function SignUpPage() {
               {role ? (
                 <motion.div
                   key={role}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: reduceMotion ? 0 : 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
+                  exit={{ opacity: 0, y: reduceMotion ? 0 : -10 }}
+                  transition={{ duration: reduceMotion ? 0.01 : 0.2 }}
                   className="space-y-4"
                 >
                   <div className="flex items-center justify-between border-b border-ui-border pb-3">
@@ -100,7 +102,7 @@ export default function SignUpPage() {
             />
           </div>
         </section>
-      </div>
+      </PageTransition>
     </main>
   );
 }
