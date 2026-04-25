@@ -175,6 +175,13 @@ export function SyncPanel() {
         </p>
       ) : null}
 
+      {!configMissing && configStatus.missingOptionalVars.length > 0 ? (
+        <p className="mt-2 rounded border border-ui-border bg-ui-surface p-2 text-xs text-ui-text-muted">
+          Optional XION features not configured: {configStatus.missingOptionalVars.join(', ')}.
+          Sync can still run.
+        </p>
+      ) : null}
+
       {walletMissing ? (
         <p className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
           Connect your XION wallet to enable sync.

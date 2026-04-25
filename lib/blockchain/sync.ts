@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { buildMerkleTree } from '@/lib/utils/merkle';
 import { db } from '@/lib/db/schema';
-import { explorerTxUrl, isConfigured, XION_RUNTIME } from '@/lib/xion/config';
+import { explorerTxUrl, isSyncConfigured, XION_RUNTIME } from '@/lib/xion/config';
 import { txCheckAndRelease, txSubmitBatch } from '@/lib/xion/contracts';
 import { getPendingPatients, getPendingVaccinations, markPatientSynced, markVaccinationSynced } from '@/lib/db/db';
 import { SMS } from '@/lib/notifications/sms';
@@ -129,7 +129,7 @@ export async function runSync(
   }
 
   if (onChain) {
-    if (!XION_RUNTIME.useRealXion || !isConfigured()) {
+    if (!XION_RUNTIME.useRealXion || !isSyncConfigured()) {
       return failureResult({
         batchId: 'config-missing',
         recordCount: pendingVaccinations.length,

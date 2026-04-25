@@ -5,7 +5,7 @@ import {
   useAbstraxionClient,
 } from '@burnt-labs/abstraxion';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { XION, isConfigured, explorerAddrUrl } from '@/lib/xion/config';
+import { XION, isSyncConfigured, explorerAddrUrl } from '@/lib/xion/config';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import {
@@ -143,7 +143,7 @@ export function useXion() {
     isConnected: !!address,
     walletError,
     explorerUrl: address ? explorerAddrUrl(address) : null,
-    configured:  isConfigured(),
+    configured:  isSyncConfigured(),
   };
 }
 
