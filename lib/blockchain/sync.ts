@@ -3,7 +3,15 @@ import { buildMerkleTree } from '@/lib/utils/merkle';
 import { db } from '@/lib/db/schema';
 import { explorerTxUrl, isSyncConfigured, XION_RUNTIME } from '@/lib/xion/config';
 import { txCheckAndRelease, txSubmitBatch } from '@/lib/xion/contracts';
-import { getPendingPatients, getPendingVaccinations, markPatientSynced, markVaccinationSynced } from '@/lib/db/db';
+import {
+  ensureSyncQueueEntry,
+  getPendingPatients,
+  getPendingSyncQueueForUser,
+  getPendingVaccinations,
+  markPatientSynced,
+  markSyncQueueSynced,
+  markVaccinationSynced,
+} from '@/lib/db/db';
 import { SMS } from '@/lib/notifications/sms';
 import { scheduleReminder } from '@/lib/notifications/reminders';
 import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
@@ -110,10 +118,43 @@ export async function runSync(
   const onChain = !demoAccount;
 
   onProgress?.({ step: 1, message: 'Gathering pending records...' });
-  const [pendingVaccinations, pendingPatients] = await Promise.all([
-    getPendingVaccinations(clinicId),
-    getPendingPatients(clinicId),
+  const [pendingQueue, pendingVaccinationsAll, pendingPatients] = await Promise.all([
+    getPendingSyncQueueForUser(session.userId),
+    getPendingVaccinations({ ownerUserId: session.userId }),
+    getPendingPatients({ ownerUserId: session.userId }),
   ]);
+
+  const queuedVaccinationIds = new Set(
+    pendingQueue
+      .filter((item) => item.type === 'vaccination')
+      .map((item) => item.recordId)
+  );
+
+  if (pendingVaccinationsAll.length > 0) {
+    const missingQueueEntries = pendingVaccinationsAll.filter((record) => !queuedVaccinationIds.has(record.id));
+    if (missingQueueEntries.length > 0) {
+      await Promise.all(
+        missingQueueEntries.map((record) =>
+          ensureSyncQueueEntry({
+            type: 'vaccination',
+            recordId: record.id,
+            ownerUserId: session.userId,
+            clinicId: record.clinicId,
+            patientId: record.patientId,
+            data: record,
+          })
+        )
+      );
+      for (const record of missingQueueEntries) {
+        queuedVaccinationIds.add(record.id);
+      }
+    }
+  }
+
+  const pendingVaccinations =
+    queuedVaccinationIds.size > 0
+      ? pendingVaccinationsAll.filter((record) => queuedVaccinationIds.has(record.id))
+      : pendingVaccinationsAll;
 
   if (pendingVaccinations.length === 0 && pendingPatients.length === 0) {
     return {
@@ -250,10 +291,20 @@ export async function runSync(
   for (const record of validVaccinations) {
     await markVaccinationSynced(record.id, txHash, blockHeight);
   }
+  await markSyncQueueSynced(
+    session.userId,
+    'vaccination',
+    validVaccinations.map((record) => record.id)
+  );
 
   for (const patient of pendingPatients) {
     await markPatientSynced(patient.id);
   }
+  await markSyncQueueSynced(
+    session.userId,
+    'patient',
+    pendingPatients.map((patient) => patient.id)
+  );
 
   await db.syncBatches.put({
     id: batchId,

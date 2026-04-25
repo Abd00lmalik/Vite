@@ -12,6 +12,7 @@ interface SyncState {
   setLastResult: (result: SyncResult) => void;
   incrementRetry: () => void;
   resetRetry: () => void;
+  resetStore: () => void;
 }
 
 export const useSyncStore = create<SyncState>((set) => ({
@@ -29,6 +30,14 @@ export const useSyncStore = create<SyncState>((set) => ({
     }),
   incrementRetry: () => set((state) => ({ retryCount: state.retryCount + 1 })),
   resetRetry: () => set({ retryCount: 0 }),
+  resetStore: () =>
+    set({
+      isSyncing: false,
+      pendingCount: 0,
+      lastSyncTime: null,
+      lastResult: null,
+      retryCount: 0,
+    }),
 }));
 
 

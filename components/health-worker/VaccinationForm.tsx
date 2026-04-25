@@ -87,6 +87,16 @@ export function VaccinationForm() {
       return;
     }
 
+    if (!demoSession && session) {
+      const ownerUserId = found.ownerUserId ?? found.registeredBy;
+      if (ownerUserId !== session.userId) {
+        toast.error('This patient belongs to another account. Search your own records only.');
+        setPatient(null);
+        setHistory([]);
+        return;
+      }
+    }
+
     if (!demoSession && session?.clinicId && found.clinicId !== session.clinicId) {
       toast.error('This patient belongs to another clinic. Search your clinic records only.');
       setPatient(null);
@@ -96,7 +106,10 @@ export function VaccinationForm() {
 
     setPatient(found);
 
-    const records = await db.vaccinations.where('patientId').equals(found.id).sortBy('dateAdministered');
+    const allRecords = await db.vaccinations.where('patientId').equals(found.id).sortBy('dateAdministered');
+    const records = !demoSession && session
+      ? allRecords.filter((record) => (record.ownerUserId ?? record.administeredBy) === session.userId)
+      : allRecords;
     setHistory(records);
   };
 
@@ -117,7 +130,6 @@ export function VaccinationForm() {
     const clinic = await db.clinics.get(clinicId);
 
     const matchedLot = INITIAL_VACCINE_LOTS.find((lot) => lot.lotNumber === values.lotNumber);
-    const recordId = uuidv4();
     let autoDispute = false;
     let disputeReason = '';
 
@@ -148,6 +160,7 @@ export function VaccinationForm() {
     }
 
     const record = await createVaccination({
+      ownerUserId: session.userId,
       patientId: patient.id,
       healthDropId: patient.healthDropId,
       vaccineName: values.vaccineName,
@@ -195,18 +208,10 @@ export function VaccinationForm() {
       });
     }
 
-    await db.syncQueue.put({
-      id: uuidv4(),
-      type: 'vaccination',
-      recordId: record.id,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      retryCount: 0,
-    });
-
     toast.success('Vaccination recorded offline. Sync pending.');
 
-    const records = await db.vaccinations.where('patientId').equals(patient.id).sortBy('dateAdministered');
+    const allRecords = await db.vaccinations.where('patientId').equals(patient.id).sortBy('dateAdministered');
+    const records = allRecords.filter((entry) => (entry.ownerUserId ?? entry.administeredBy) === session.userId);
     setHistory(records);
     const sameVaccineCount = records.filter((entry) => entry.vaccineName === values.vaccineName).length;
 
@@ -249,16 +254,23 @@ export function VaccinationForm() {
             <PatientSearch
               onFound={onPatientFound}
               clinicId={session?.clinicId}
+              ownerUserId={session?.userId}
               allowCrossClinic={demoSession}
             />
           ) : (
             <QRScanner
               onScan={async (value) => {
-                const found = await db.patients.where('healthDropId').equals(value).first();
+                const matches = await db.patients.where('healthDropId').equals(value).toArray();
+                const found = !demoSession && session
+                  ? matches.find((entry) => (entry.ownerUserId ?? entry.registeredBy) === session.userId)
+                  : matches[0];
                 await onPatientFound(found ?? null);
               }}
               onManualPhoneLookup={async (phone) => {
-                const found = await db.patients.where('parentPhone').equals(phone).first();
+                const matches = await db.patients.where('parentPhone').equals(phone).toArray();
+                const found = !demoSession && session
+                  ? matches.find((entry) => (entry.ownerUserId ?? entry.registeredBy) === session.userId)
+                  : matches[0];
                 await onPatientFound(found ?? null);
               }}
             />

@@ -53,6 +53,7 @@ export interface VaccineLot {
 export interface Patient {
   id: string;
   userId?: string;
+  ownerUserId?: string;
   healthDropId: string;
   name: string;
   dateOfBirth: string;
@@ -73,6 +74,7 @@ export interface Patient {
 
 export interface VaccinationRecord {
   id: string;
+  ownerUserId?: string;
   patientId: string;
   healthDropId: string;
   vaccineName: string;
@@ -188,7 +190,13 @@ export interface SyncQueueItem {
   id: string;
   type: 'vaccination' | 'patient' | 'grant' | 'notification';
   recordId: string;
-  status: 'pending' | 'processing' | 'failed' | 'completed';
+  status: 'pending' | 'processing' | 'failed' | 'completed' | 'synced';
+  ownerUserId?: string;
+  clinicId?: string;
+  patientId?: string;
+  userId?: string;
+  syncedAt?: string;
+  data?: unknown;
   createdAt: string;
   retryCount: number;
   error?: string;

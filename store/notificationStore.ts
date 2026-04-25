@@ -3,6 +3,7 @@ import { create } from 'zustand';
 interface NotificationState {
   unreadCount: number;
   setUnreadCount: (count: number) => void;
+  resetStore: () => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
@@ -11,6 +12,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     // Only call set if the value actually changed - prevents redundant renders
     set((state) => (state.unreadCount === count ? state : { unreadCount: count }));
   },
+  resetStore: () => set({ unreadCount: 0 }),
 }));
 
 

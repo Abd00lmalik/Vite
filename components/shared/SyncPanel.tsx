@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, ExternalLink, Link2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import toast from 'react-hot-toast';
-import { db } from '@/lib/db/schema';
+import { countPendingSyncItemsForUser } from '@/lib/db/db';
 import { runSync, type SyncProgressUpdate } from '@/lib/blockchain/sync';
 import { useXion } from '@/hooks/useXion';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
@@ -51,25 +51,10 @@ export function SyncPanel() {
     configStatus.configReady &&
     (!isConnected || !signingClient || !address);
 
-  const clinicId = session?.clinicId ?? (session ? `clinic-${session.userId.slice(0, 6)}` : 'clinic-unknown');
-
   const pendingCount = useLiveQuery(async () => {
-    if (!session) return 0;
-
-    const pendingVaccinations = await db.vaccinations
-      .where('clinicId')
-      .equals(clinicId)
-      .filter((record) => record.syncStatus === 'pending')
-      .count();
-
-    const pendingPatients = await db.patients
-      .where('clinicId')
-      .equals(clinicId)
-      .filter((patient) => patient.syncStatus === 'pending')
-      .count();
-
-    return pendingVaccinations + pendingPatients;
-  }, [clinicId, session?.userId]) ?? 0;
+    if (!session?.userId) return 0;
+    return countPendingSyncItemsForUser(session.userId);
+  }, [session?.userId]) ?? 0;
 
   const progressPercent = useMemo(() => {
     if (!progress) return 0;

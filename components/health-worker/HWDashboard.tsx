@@ -40,17 +40,13 @@ export function HWDashboard() {
       await db.patients.where('registeredBy').equals(session.userId).toArray()
     ).filter((patient) => patient.registeredAt.slice(0, 10) === today).length;
 
-    const pendingVaccinations = await db.vaccinations
-      .where('clinicId')
-      .equals(clinicId)
-      .filter((record) => record.syncStatus === 'pending')
-      .count();
+    const pendingVaccinations = (
+      await db.vaccinations.where('administeredBy').equals(session.userId).toArray()
+    ).filter((record) => record.syncStatus === 'pending').length;
 
-    const pendingPatients = await db.patients
-      .where('clinicId')
-      .equals(clinicId)
-      .filter((patient) => patient.syncStatus === 'pending')
-      .count();
+    const pendingPatients = (
+      await db.patients.where('registeredBy').equals(session.userId).toArray()
+    ).filter((patient) => patient.syncStatus === 'pending').length;
 
     const totalRecords = await db.vaccinations
       .where('administeredBy')
@@ -154,7 +150,7 @@ export function HWDashboard() {
 
         <Card>
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-ui-text">Weekly Vaccination Performance</h3>
-          <ClinicStatsBar clinicId={clinicId} />
+          <ClinicStatsBar workerId={session.userId} />
         </Card>
 
         <Card>

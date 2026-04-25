@@ -93,7 +93,9 @@ export function PatientForm() {
       return;
     }
 
-    const existingPatient = await db.patients.where('parentPhone').equals(values.parentPhone).first();
+    const existingPatient = (await db.patients.where('parentPhone').equals(values.parentPhone).toArray()).find(
+      (patient) => (patient.ownerUserId ?? patient.registeredBy) === session.userId
+    );
     if (existingPatient) {
       toast.error('This phone number is already registered. Search for the patient instead.');
       return;
@@ -117,6 +119,7 @@ export function PatientForm() {
     try {
       patient = await createPatient({
         userId: patientUser?.id,
+        ownerUserId: session.userId,
         name: values.childName,
         dateOfBirth: values.dateOfBirth,
         sex: values.sex,

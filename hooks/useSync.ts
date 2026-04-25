@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/db/schema';
+import { countPendingSyncItemsForUser } from '@/lib/db/db';
 import { useSyncStore } from '@/store/syncStore';
 import { useAuthStore } from '@/store/authStore';
 import { runSync } from '@/lib/blockchain/sync';
@@ -27,10 +27,9 @@ export function useSync() {
 
   const pendingCount =
     useLiveQuery(async () => {
-      const pendingVaccinations = await db.vaccinations.where('syncStatus').equals('pending').count();
-      const pendingPatients = await db.patients.where('syncStatus').equals('pending').count();
-      return pendingVaccinations + pendingPatients;
-    }, []) ?? 0;
+      if (!session?.userId) return 0;
+      return countPendingSyncItemsForUser(session.userId);
+    }, [session?.userId]) ?? 0;
 
   const sync = useCallback(async (): Promise<SyncResult | null> => {
     if (!session || isSyncing) return null;
@@ -40,10 +39,7 @@ export function useSync() {
     try {
       const result = await runSync(session, signingClient, senderAddress ?? '', setProgressStep);
       setLastResult(result);
-      setPending(
-        (await db.vaccinations.where('syncStatus').equals('pending').count()) +
-          (await db.patients.where('syncStatus').equals('pending').count())
-      );
+      setPending(await countPendingSyncItemsForUser(session.userId));
       if (result.success) {
         resetRetry();
       } else {
@@ -57,7 +53,7 @@ export function useSync() {
       setSyncing(false);
       setTimeout(() => setProgressStep(null), 1200);
     }
-  }, [incrementRetry, isSyncing, resetRetry, session, setLastResult, setPending, setSyncing]);
+  }, [incrementRetry, isSyncing, resetRetry, senderAddress, session, setLastResult, setPending, setSyncing, signingClient]);
 
   return { sync, isSyncing, lastResult, lastSyncTime, pendingCount, progressStep };
 }

@@ -5,13 +5,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db/schema';
 
 interface ClinicStatsBarProps {
-  clinicId: string;
+  workerId: string;
 }
 
-export function ClinicStatsBar({ clinicId }: ClinicStatsBarProps) {
+export function ClinicStatsBar({ workerId }: ClinicStatsBarProps) {
   const vaccinations = useLiveQuery(
-    () => db.vaccinations.where('clinicId').equals(clinicId).toArray(),
-    [clinicId]
+    () => db.vaccinations.where('administeredBy').equals(workerId).toArray(),
+    [workerId]
   );
 
   const data = useMemo(() => {
