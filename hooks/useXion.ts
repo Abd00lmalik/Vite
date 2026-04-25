@@ -156,7 +156,7 @@ export function useXionBalance(address: string | null) {
   useEffect(() => {
     if (!address || !queryClient) return;
     setLoading(true);
-    fetch(`${XION.rest}/cosmos/bank/v1beta1/balances/${address}`)
+    fetch(`${XION.rest}/cosmos/bank/v1beta1/balances/${address}`, { method: 'GET', cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
         const uxion = data.balances?.find((b: any) => b.denom === 'uxion');

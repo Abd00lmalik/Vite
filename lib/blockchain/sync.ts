@@ -16,7 +16,11 @@ import { SMS } from '@/lib/notifications/sms';
 import { scheduleReminder } from '@/lib/notifications/reminders';
 import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
 import { isDemoSession } from '@/lib/auth/demo';
-import { checkXionAccountPreflight, hasEnoughSyncGas, requiredSyncGasUxion } from '@/lib/xion/preflight';
+import {
+  formatAccountNotInitializedMessage,
+  runSyncPreflight,
+  requiredSyncGasUxion,
+} from '@/lib/xion/preflight';
 import type { SyncResult } from '@/types';
 
 export interface SyncProgressUpdate {
@@ -35,7 +39,13 @@ function normalizeErrorMessage(error: unknown): string {
   return JSON.stringify(error);
 }
 
-function mapSyncError(error: unknown, senderAddress?: string): string {
+type SyncErrorStage = 'preflight' | 'submit' | 'milestone' | 'unknown';
+
+function mapSyncError(
+  error: unknown,
+  senderAddress?: string,
+  stage: SyncErrorStage = 'unknown'
+): string {
   const raw = normalizeErrorMessage(error);
   const message = raw.toLowerCase();
 
@@ -49,9 +59,8 @@ function mapSyncError(error: unknown, senderAddress?: string): string {
     return 'Could not reach XION network. Check your connection.';
   }
 
-  if (message.includes('account') && message.includes('not found')) {
-    const suffix = senderAddress ? `\nWallet: ${senderAddress}` : '';
-    return `Your XION wallet account has not been initialized on-chain. Please send a small amount of UXION to your wallet address to activate it before syncing.${suffix}`;
+  if (stage === 'preflight' && message.includes('account') && message.includes('not found')) {
+    return formatAccountNotInitializedMessage(senderAddress);
   }
 
   if (
@@ -61,7 +70,7 @@ function mapSyncError(error: unknown, senderAddress?: string): string {
     return 'Insufficient UXION balance for gas fees.';
   }
 
-  if (message.includes('rpc error') || message.includes('contract')) {
+  if (stage !== 'preflight' && (message.includes('rpc error') || message.includes('contract'))) {
     return `Contract error: ${raw}`;
   }
 
@@ -192,27 +201,25 @@ export async function runSync(
 
     onProgress?.({ step: 2, message: 'Checking wallet status on XION...' });
     try {
-      const accountPreflight = await checkXionAccountPreflight(senderAddress);
-      if (!accountPreflight.accountFound) {
+      const accountPreflight = await runSyncPreflight(senderAddress);
+      if (!accountPreflight.accountExists) {
         return failureResult({
           batchId: 'account-not-found',
           recordCount: pendingVaccinations.length,
           merkleRoot: '0x0',
           mode: 'onchain',
-          errors: [
-            `Your XION wallet account has not been initialized on-chain. Please send a small amount of UXION to your wallet address to activate it before syncing.\nWallet: ${senderAddress}`,
-          ],
+          errors: [formatAccountNotInitializedMessage(senderAddress)],
         });
       }
 
-      if (!hasEnoughSyncGas(accountPreflight.balanceUxion)) {
+      if (!accountPreflight.hasMinimumBalance) {
         return failureResult({
           batchId: 'insufficient-gas',
           recordCount: pendingVaccinations.length,
           merkleRoot: '0x0',
           mode: 'onchain',
           errors: [
-            `Insufficient UXION balance for gas fees. Minimum required: ${requiredSyncGasUxion().toString()} uxion. Current: ${accountPreflight.balanceUxion.toString()} uxion.`,
+            `Insufficient UXION balance for gas fees. Minimum required: ${requiredSyncGasUxion().toString()} uxion. Current: ${accountPreflight.balanceAmount.toString()} uxion.`,
           ],
         });
       }
@@ -222,7 +229,7 @@ export async function runSync(
         recordCount: pendingVaccinations.length,
         merkleRoot: '0x0',
         mode: 'onchain',
-        errors: [mapSyncError(error, senderAddress)],
+        errors: [mapSyncError(error, senderAddress, 'preflight')],
       });
     }
   }
@@ -274,7 +281,7 @@ export async function runSync(
       explorerUrl = tx.explorerUrl;
       blockHeight = tx.height;
     } catch (error: any) {
-      errors.push(mapSyncError(error, senderAddress));
+      errors.push(mapSyncError(error, senderAddress, 'submit'));
       return failureResult({
         batchId,
         recordCount: validVaccinations.length,
@@ -391,7 +398,7 @@ export async function runSync(
         await scheduleReminder(patient, nextMilestone, dueDate.toISOString());
       }
     } catch (error: any) {
-      errors.push(`Milestone processing failed for ${record.id}: ${mapSyncError(error, senderAddress)}`);
+      errors.push(`Milestone processing failed for ${record.id}: ${mapSyncError(error, senderAddress, 'milestone')}`);
     }
   }
 

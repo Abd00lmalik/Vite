@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, ExternalLink, Link2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -15,6 +15,13 @@ import { isDemoAccount } from '@/lib/auth/demo';
 import { shortTxHash } from '@/lib/utils/format';
 import { getXionConfigStatus } from '@/lib/xion/readiness';
 import { toastErrorOnce } from '@/lib/utils/toastOnce';
+import {
+  formatAccountNotInitializedMessage,
+  isAccountNotInitializedMessage,
+  runSyncPreflight,
+  type SyncPreflightResult,
+} from '@/lib/xion/preflight';
+import { XION } from '@/lib/xion/config';
 
 const STEP_LABELS: Record<SyncProgressUpdate['step'], string> = {
   1: 'Gathering pending records',
@@ -30,12 +37,16 @@ const STEP_SEQUENCE: SyncProgressUpdate['step'][] = [1, 2, 3, 4, 5];
 export function SyncPanel() {
   const { session } = useAuthStore();
   const { address, signingClient, isConnected, walletError } = useXion();
-  const { isSyncing, setSyncing, setLastResult } = useSyncStore();
+  const { isSyncing, setSyncing, setLastResult, clearLastResult } = useSyncStore();
 
   const [progress, setProgress] = useState<SyncProgressUpdate | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [readiness, setReadiness] = useState<SyncPreflightResult | null>(null);
+  const [isCheckingReadiness, setIsCheckingReadiness] = useState(false);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
   const isOnline = useOfflineStatus();
   const syncRef = useRef(false);
+  const accountInitToastIdRef = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
   const configStatusRef = useRef<ReturnType<typeof getXionConfigStatus> | null>(null);
   if (!configStatusRef.current) {
@@ -61,6 +72,65 @@ export function SyncPanel() {
     return Math.round((progress.step / TOTAL_STEPS) * 100);
   }, [progress]);
 
+  const missingOnChainAccount = requiresOnchainSync && !!address && readiness?.accountExists === false;
+  const insufficientOnChainBalance =
+    requiresOnchainSync &&
+    !!address &&
+    readiness?.accountExists === true &&
+    readiness?.hasMinimumBalance === false;
+
+  useEffect(() => {
+    const connectedAddress = address;
+    if (!requiresOnchainSync || configMissing || !connectedAddress) {
+      setReadiness(null);
+      setReadinessError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingReadiness(true);
+
+    async function checkReadiness() {
+      try {
+        if (!connectedAddress) return;
+        const latest = await runSyncPreflight(connectedAddress, XION.rest);
+        if (cancelled) return;
+
+        setReadiness(latest);
+        setReadinessError(null);
+
+        if (latest.accountExists && latest.hasMinimumBalance) {
+          setResult((prev: any) => {
+            const errors = prev?.errors ?? [];
+            if (errors.some((error: string) => isAccountNotInitializedMessage(error))) {
+              return null;
+            }
+            return prev;
+          });
+          clearLastResult();
+          if (accountInitToastIdRef.current) {
+            toast.dismiss(accountInitToastIdRef.current);
+            accountInitToastIdRef.current = undefined;
+          }
+        }
+      } catch (error: any) {
+        if (cancelled) return;
+        setReadiness(null);
+        setReadinessError(error?.message ?? 'Unable to verify wallet readiness right now.');
+      } finally {
+        if (!cancelled) {
+          setIsCheckingReadiness(false);
+        }
+      }
+    }
+
+    void checkReadiness();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address, clearLastResult, configMissing, requiresOnchainSync]);
+
   async function handleSync() {
     if (!session || isSyncing || syncRef.current || !isOnline || pendingCount === 0) return;
     if (configMissing) {
@@ -72,6 +142,36 @@ export function SyncPanel() {
     }
     if (walletMissing) {
       return;
+    }
+
+    if (requiresOnchainSync && address) {
+      try {
+        const latest = await runSyncPreflight(address, XION.rest);
+        setReadiness(latest);
+        setReadinessError(null);
+
+        if (!latest.accountExists) {
+          const message = formatAccountNotInitializedMessage(address);
+          const toastId = toastErrorOnce(message, (msg) => toast.error(msg));
+          accountInitToastIdRef.current = toastId;
+          return;
+        }
+
+        if (!latest.hasMinimumBalance) {
+          toastErrorOnce(
+            `Insufficient UXION balance for gas fees. Minimum required: 75000 uxion. Current: ${latest.balanceAmount} uxion.`,
+            (msg) => toast.error(msg)
+          );
+          return;
+        }
+
+        clearLastResult();
+      } catch (error: any) {
+        const message = error?.message ?? 'Unable to verify wallet readiness right now.';
+        setReadinessError(message);
+        toastErrorOnce(message, (msg) => toast.error(msg));
+        return;
+      }
     }
 
     syncRef.current = true;
@@ -99,7 +199,11 @@ export function SyncPanel() {
         const txSuffix = response.txHash ? ` Tx: ${shortTxHash(response.txHash)}` : '';
         toast.success(`${response.recordCount} records synced.${txSuffix}`);
       } else {
-        toastErrorOnce(response.errors[0] ?? 'Sync failed.', (message) => toast.error(message));
+        const firstError = response.errors[0] ?? 'Sync failed.';
+        const toastId = toastErrorOnce(firstError, (message) => toast.error(message));
+        if (isAccountNotInitializedMessage(firstError)) {
+          accountInitToastIdRef.current = toastId;
+        }
       }
     } catch (error: any) {
       const message = error?.message ?? 'Sync failed.';
@@ -110,7 +214,10 @@ export function SyncPanel() {
         mode: demoSession ? 'simulated' : 'onchain',
         errors: [message],
       });
-      toastErrorOnce(message, (text) => toast.error(text));
+      const toastId = toastErrorOnce(message, (text) => toast.error(text));
+      if (isAccountNotInitializedMessage(message)) {
+        accountInitToastIdRef.current = toastId;
+      }
     } finally {
       setSyncing(false);
       syncRef.current = false;
@@ -120,11 +227,26 @@ export function SyncPanel() {
   }
 
   const syncDisabled =
-    isSyncing || !isOnline || pendingCount === 0 || configMissing || walletMissing;
+    isSyncing ||
+    !isOnline ||
+    pendingCount === 0 ||
+    configMissing ||
+    walletMissing ||
+    isCheckingReadiness ||
+    missingOnChainAccount ||
+    insufficientOnChainBalance;
   const syncDisabledReason = configMissing
     ? 'XION sync requires environment configuration. See setup guide.'
     : walletMissing
     ? 'Connect your XION wallet to enable sync.'
+    : isCheckingReadiness
+    ? 'Checking wallet readiness on XION...'
+    : missingOnChainAccount
+    ? 'Wallet account is not initialized on-chain yet.'
+    : insufficientOnChainBalance
+    ? 'Insufficient UXION balance for gas fees.'
+    : readinessError
+    ? 'Unable to verify wallet readiness right now.'
     : !isOnline
     ? 'Device is offline.'
     : pendingCount === 0
@@ -170,6 +292,28 @@ export function SyncPanel() {
       {walletMissing ? (
         <p className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
           Connect your XION wallet to enable sync.
+        </p>
+      ) : null}
+
+      {missingOnChainAccount ? (
+        <p className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
+          <strong>Wallet account is not initialized on-chain.</strong>
+          <br />
+          Fund your wallet with a small amount of UXION first.
+          <br />
+          Wallet: {address}
+        </p>
+      ) : null}
+
+      {insufficientOnChainBalance ? (
+        <p className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
+          Insufficient UXION for sync gas fees. Current balance: {readiness?.balanceAmount ?? 0} uxion.
+        </p>
+      ) : null}
+
+      {readinessError ? (
+        <p className="mt-2 rounded border border-who-red/20 bg-who-red-light p-2 text-xs text-who-red">
+          {readinessError}
         </p>
       ) : null}
 
