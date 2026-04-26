@@ -191,6 +191,7 @@ export interface SyncQueueItem {
   type: 'vaccination' | 'patient' | 'grant' | 'notification';
   recordId: string;
   status: 'pending' | 'processing' | 'failed' | 'completed' | 'synced';
+  isDemo?: boolean;
   ownerUserId?: string;
   clinicId?: string;
   patientId?: string;

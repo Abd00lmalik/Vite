@@ -22,6 +22,7 @@ import {
   type SyncPreflightResult,
 } from '@/lib/xion/preflight';
 import { XION } from '@/lib/xion/config';
+import { clearSyncQueueQuarantine, getSyncQueueQuarantine } from '@/lib/db/syncQueueSanitizer';
 
 const STEP_LABELS: Record<SyncProgressUpdate['step'], string> = {
   1: 'Gathering pending records',
@@ -44,6 +45,7 @@ export function SyncPanel() {
   const [readiness, setReadiness] = useState<SyncPreflightResult | null>(null);
   const [isCheckingReadiness, setIsCheckingReadiness] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [quarantineCount, setQuarantineCount] = useState(0);
   const isOnline = useOfflineStatus();
   const syncRef = useRef(false);
   const accountInitToastIdRef = useRef<string | undefined>(undefined);
@@ -130,6 +132,14 @@ export function SyncPanel() {
       cancelled = true;
     };
   }, [address, clearLastResult, configMissing, requiresOnchainSync]);
+
+  useEffect(() => {
+    if (!session?.userId) {
+      setQuarantineCount(0);
+      return;
+    }
+    setQuarantineCount(getSyncQueueQuarantine(session.userId).length);
+  }, [pendingCount, result, session?.userId]);
 
   async function handleSync() {
     if (!session || isSyncing || syncRef.current || !isOnline || pendingCount === 0) return;
@@ -253,6 +263,13 @@ export function SyncPanel() {
     ? 'No pending records to sync.'
     : '';
 
+  const handleClearQuarantine = () => {
+    if (!session?.userId) return;
+    clearSyncQueueQuarantine(session.userId);
+    setQuarantineCount(0);
+    toast.success('Quarantined records cleared.');
+  };
+
   return (
     <div className="mb-4 rounded-xl border border-ui-border bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -315,6 +332,21 @@ export function SyncPanel() {
         <p className="mt-2 rounded border border-who-red/20 bg-who-red-light p-2 text-xs text-who-red">
           {readinessError}
         </p>
+      ) : null}
+
+      {quarantineCount > 0 ? (
+        <div className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
+          <p>
+            {quarantineCount} record(s) were excluded from sync because they contain stale or cross-account data.
+          </p>
+          <button
+            type="button"
+            onClick={handleClearQuarantine}
+            className="mt-2 rounded border border-who-orange/40 px-2 py-1 text-[11px] font-semibold hover:bg-who-orange/10"
+          >
+            Clear quarantined records
+          </button>
+        </div>
       ) : null}
 
       {syncDisabledReason ? (

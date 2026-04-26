@@ -42,6 +42,8 @@ export async function createPatient(
   data: Omit<Patient, 'id' | 'healthDropId' | 'syncStatus' | 'registeredAt'>
 ): Promise<Patient> {
   const ownerUserId = data.ownerUserId ?? data.registeredBy;
+  const ownerUser = await db.users.get(ownerUserId);
+  const isDemoOwner = Boolean(ownerUser?.isDemoUser);
   const existing = (await db.patients.where('parentPhone').equals(data.parentPhone).toArray()).find(
     (patient) => resolvePatientOwner(patient) === ownerUserId
   );
@@ -66,6 +68,7 @@ export async function createPatient(
     clinicId: patient.clinicId,
     patientId: patient.id,
     userId: ownerUserId,
+    isDemo: isDemoOwner,
     data: patient,
   });
   return patient;
@@ -107,6 +110,8 @@ export async function createVaccination(
   data: Omit<VaccinationRecord, 'id' | 'syncStatus' | 'createdAt'>
 ): Promise<VaccinationRecord> {
   const ownerUserId = data.ownerUserId ?? data.administeredBy;
+  const ownerUser = await db.users.get(ownerUserId);
+  const isDemoOwner = Boolean(ownerUser?.isDemoUser);
   const record: VaccinationRecord = {
     ...data,
     ownerUserId,
@@ -122,6 +127,7 @@ export async function createVaccination(
     clinicId: record.clinicId,
     patientId: record.patientId,
     userId: ownerUserId,
+    isDemo: isDemoOwner,
     data: record,
   });
   return record;
@@ -224,6 +230,7 @@ export async function ensureSyncQueueEntry(
       await db.syncQueue.update(existing.id, {
         status: 'pending',
         error: undefined,
+        isDemo: item.isDemo ?? existing.isDemo,
         data: item.data ?? existing.data,
       });
     }

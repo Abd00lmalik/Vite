@@ -12,6 +12,7 @@ import {
   markSyncQueueSynced,
   markVaccinationSynced,
 } from '@/lib/db/db';
+import { sanitizeSyncQueue } from '@/lib/db/syncQueueSanitizer';
 import { SMS } from '@/lib/notifications/sms';
 import { scheduleReminder } from '@/lib/notifications/reminders';
 import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
@@ -21,6 +22,13 @@ import {
   runSyncPreflight,
   requiredSyncGasUxion,
 } from '@/lib/xion/preflight';
+import {
+  classifyAddress,
+  extractAddressFields,
+  formatAddressError,
+  type AddressClassificationContext,
+  type XionAddressRole,
+} from '@/lib/xion/addressTypes';
 import type { Patient, SyncResult, VaccinationRecord } from '@/types';
 
 export interface SyncProgressUpdate {
@@ -30,10 +38,10 @@ export interface SyncProgressUpdate {
 
 interface SyncAddressValidationResult {
   valid: boolean;
-  fatalErrors: string[];
+  errors: string[];
   warnings: string[];
-  validRecords: VaccinationRecord[];
-  foreignRecords: VaccinationRecord[];
+  safeRecords: VaccinationRecord[];
+  quarantinedRecordIds: string[];
 }
 
 function mockTxHash(seed: string): string {
@@ -57,7 +65,13 @@ function isLikelyXionAddress(value?: string | null): boolean {
 
 function classifySyncError(
   rawError: string,
-  context: { contractName?: string; address?: string; stage?: SyncErrorStage } = {}
+  context: {
+    contractName?: string;
+    address?: string;
+    stage?: SyncErrorStage;
+    role?: XionAddressRole;
+    classifyContext?: AddressClassificationContext;
+  } = {}
 ): string {
   const message = rawError.toLowerCase();
 
@@ -78,7 +92,12 @@ function classifySyncError(
   if (message.includes('account') && message.includes('not found')) {
     const addressMatch = rawError.match(/account\s+(xion1[0-9a-z]+)/i);
     if (addressMatch?.[1]) {
-      return `Account ${addressMatch[1]} does not exist on XION Testnet-2. This address may be stale or uninitialized.`;
+      const resolvedRole =
+        context.role ??
+        (context.classifyContext != null
+          ? classifyAddress(addressMatch[1], context.classifyContext).role
+          : 'unknown');
+      return formatAddressError(addressMatch[1], resolvedRole, rawError);
     }
     if (context.contractName) {
       return `${context.contractName} contract was not found on-chain. Verify the contract address in your environment configuration.`;
@@ -113,13 +132,22 @@ function classifySyncError(
 
 function mapSyncError(
   error: unknown,
-  context: { senderAddress?: string; stage?: SyncErrorStage; contractName?: string; address?: string } = {}
+  context: {
+    senderAddress?: string;
+    stage?: SyncErrorStage;
+    contractName?: string;
+    address?: string;
+    role?: XionAddressRole;
+    classifyContext?: AddressClassificationContext;
+  } = {}
 ): string {
   const raw = normalizeErrorMessage(error);
   return classifySyncError(raw, {
     contractName: context.contractName,
     address: context.address ?? context.senderAddress,
     stage: context.stage,
+    role: context.role,
+    classifyContext: context.classifyContext,
   });
 }
 
@@ -129,24 +157,81 @@ function resolveVaccinationOwner(
   return record.ownerUserId ?? record.administeredBy;
 }
 
-async function resolvePatientPayoutAddress(patient: Patient): Promise<string | null> {
-  if (!patient.userId) return null;
+interface PatientPayoutResolution {
+  address: string | null;
+  source: string;
+}
+
+async function resolvePatientPayoutAddress(patient: Patient): Promise<PatientPayoutResolution> {
+  if (!patient.userId) {
+    return {
+      address: null,
+      source: `patients.${patient.id}.userId is empty`,
+    };
+  }
+
   const linkedUser = await db.users.get(patient.userId);
-  const walletAddress = linkedUser?.walletAddress?.trim();
-  if (!walletAddress || !isLikelyXionAddress(walletAddress)) return null;
-  return walletAddress;
+  if (!linkedUser) {
+    return {
+      address: null,
+      source: `users.${patient.userId} not found for patients.${patient.id}.userId`,
+    };
+  }
+
+  const walletAddress = linkedUser.walletAddress?.trim();
+  if (!walletAddress || !isLikelyXionAddress(walletAddress)) {
+    return {
+      address: null,
+      source: `users.${linkedUser.id}.walletAddress missing/invalid`,
+    };
+  }
+
+  return {
+    address: walletAddress,
+    source: `users.${linkedUser.id}.walletAddress`,
+  };
+}
+
+function resolveRecordOwner(record: VaccinationRecord): string {
+  return record.ownerUserId ?? record.administeredBy;
+}
+
+function resolveQueueOwner(userId?: string, ownerUserId?: string): string | undefined {
+  return ownerUserId ?? userId;
+}
+
+function buildAddressClassificationContext(
+  connectedWallet: string,
+  contracts: typeof XION.contracts,
+  isDemoRecord: boolean
+): AddressClassificationContext {
+  return {
+    connectedWallet,
+    contractAddresses: contracts,
+    isDemoRecord,
+    healthWorkerWallets: [connectedWallet],
+  };
 }
 
 async function validateSyncAddresses(
+  pendingQueue: Awaited<ReturnType<typeof getPendingSyncQueueForUser>>,
   pendingRecords: VaccinationRecord[],
+  connectedWallet: string,
   contracts: typeof XION.contracts,
   currentUserId: string,
-  enforceContractChecks: boolean
+  isDemoMode: boolean
 ): Promise<SyncAddressValidationResult> {
-  const fatalErrors: string[] = [];
+  const errors: string[] = [];
   const warnings: string[] = [];
+  const quarantinedRecordIds: string[] = [];
+  const safeRecordIds = new Set<string>();
+  const classificationContext = buildAddressClassificationContext(
+    connectedWallet,
+    contracts,
+    isDemoMode
+  );
 
-  if (enforceContractChecks) {
+  if (!isDemoMode) {
     const contractChecks = [
       { name: 'VaccinationRecord', address: contracts.vaccinationRecord },
       { name: 'MilestoneChecker', address: contracts.milestoneChecker },
@@ -155,27 +240,62 @@ async function validateSyncAddresses(
     ];
 
     for (const { name, address } of contractChecks) {
-      if (!isLikelyXionAddress(address)) {
-        fatalErrors.push(`${name} contract address is not configured or invalid.`);
+      if (!address || !isLikelyXionAddress(address)) {
+        errors.push(`${name} contract address is not configured or invalid.`);
       }
     }
   }
 
-  const foreignRecords = pendingRecords.filter((record) => resolveVaccinationOwner(record) !== currentUserId);
-  if (foreignRecords.length > 0) {
-    warnings.push(
-      `One or more pending records contain stale data from a previous session and have been removed from the sync queue (${foreignRecords.length} skipped).`
-    );
+  for (const queueItem of pendingQueue) {
+    const queueOwner = resolveQueueOwner(queueItem.userId, queueItem.ownerUserId);
+    if (queueOwner !== currentUserId) {
+      quarantinedRecordIds.push(queueItem.recordId);
+      warnings.push(`Record ${queueItem.recordId} belongs to a different account and was excluded from sync.`);
+      continue;
+    }
+
+    if (!isDemoMode && queueItem.isDemo) {
+      quarantinedRecordIds.push(queueItem.recordId);
+      warnings.push(`Record ${queueItem.recordId} is demo data and was excluded from real sync.`);
+      continue;
+    }
+
+    const addressFields = extractAddressFields(queueItem, 'queueItem');
+    for (const { field, address } of addressFields) {
+      const classified = classifyAddress(address, {
+        ...classificationContext,
+        isDemoRecord: Boolean(queueItem.isDemo),
+      });
+
+      if (classified.role === 'demo') {
+        quarantinedRecordIds.push(queueItem.recordId);
+        warnings.push(`Record ${queueItem.recordId} contains a demo address in "${field}" and was excluded.`);
+        continue;
+      }
+
+      if (classified.role === 'unknown') {
+        warnings.push(
+          `Record ${queueItem.recordId} contains an unrecognized address in "${field}". It is treated as an identity reference and not queried on-chain.`
+        );
+      }
+    }
+
+    safeRecordIds.add(queueItem.recordId);
   }
 
-  const validRecords = pendingRecords.filter((record) => resolveVaccinationOwner(record) === currentUserId);
+  const safeRecords = pendingRecords.filter((record) => {
+    const owner = resolveRecordOwner(record);
+    if (owner !== currentUserId) return false;
+    if (safeRecordIds.size === 0) return true;
+    return safeRecordIds.has(record.id);
+  });
 
   return {
-    valid: fatalErrors.length === 0,
-    fatalErrors,
+    valid: errors.length === 0,
+    errors,
     warnings,
-    validRecords,
-    foreignRecords,
+    safeRecords,
+    quarantinedRecordIds,
   };
 }
 
@@ -227,6 +347,13 @@ export async function runSync(
   const clinicId = session.clinicId ?? `clinic-${session.userId.slice(0, 6)}`;
   const demoAccount = Boolean(session.demo) || isDemoSession({ userId: session.userId } as any);
   const onChain = !demoAccount;
+  const addressContext = buildAddressClassificationContext(senderAddress, XION.contracts, demoAccount);
+  const sanitizeResult = await sanitizeSyncQueue(session.userId, { isDemoUser: demoAccount });
+  if (sanitizeResult.quarantinedCount > 0) {
+    errors.push(
+      `One or more pending records contain stale data from a previous session and have been removed from the sync queue (${sanitizeResult.quarantinedCount} quarantined).`
+    );
+  }
 
   onProgress?.({ step: 1, message: 'Gathering pending records...' });
   const [pendingQueue, pendingVaccinationsAll, pendingPatients] = await Promise.all([
@@ -268,23 +395,22 @@ export async function runSync(
       : pendingVaccinationsAll;
 
   const addressValidation = await validateSyncAddresses(
+    pendingQueue,
     pendingVaccinations,
+    senderAddress,
     XION.contracts,
     session.userId,
-    onChain
+    demoAccount
   );
 
-  if (addressValidation.foreignRecords.length > 0) {
-    const staleQueueIds = new Set(addressValidation.foreignRecords.map((record) => record.id));
-    const staleQueueItems = pendingQueue.filter(
-      (item) => item.type === 'vaccination' && staleQueueIds.has(item.recordId)
-    );
-
+  if (addressValidation.quarantinedRecordIds.length > 0) {
+    const staleQueueIds = new Set(addressValidation.quarantinedRecordIds);
+    const staleQueueItems = pendingQueue.filter((item) => staleQueueIds.has(item.recordId));
     await Promise.all(
       staleQueueItems.map((item) =>
         db.syncQueue.update(item.id, {
           status: 'failed',
-          error: 'Stale record from a different session was removed from this sync attempt.',
+          error: 'quarantined: stale data from previous session',
         })
       )
     );
@@ -294,17 +420,17 @@ export async function runSync(
     errors.push(...addressValidation.warnings);
   }
 
-  if (onChain && !addressValidation.valid) {
+  if (!addressValidation.valid) {
     return failureResult({
       batchId: 'address-validation-failed',
-      recordCount: addressValidation.validRecords.length,
+      recordCount: addressValidation.safeRecords.length,
       merkleRoot: '0x0',
       mode: onChain ? 'onchain' : 'simulated',
-      errors: [...errors, ...addressValidation.fatalErrors],
+      errors: [...errors, ...addressValidation.errors],
     });
   }
 
-  const scopedVaccinations = addressValidation.validRecords;
+  const scopedVaccinations = addressValidation.safeRecords;
 
   if (scopedVaccinations.length === 0 && pendingPatients.length === 0) {
     return {
@@ -374,6 +500,8 @@ export async function runSync(
           mapSyncError(error, {
             senderAddress,
             stage: 'preflight',
+            role: 'connected_wallet',
+            classifyContext: addressContext,
           }),
         ],
       });
@@ -433,6 +561,8 @@ export async function runSync(
           stage: 'submit',
           contractName: 'VaccinationRecord',
           address: XION.contracts.vaccinationRecord,
+          role: 'contract',
+          classifyContext: addressContext,
         })
       );
       return failureResult({
@@ -479,7 +609,6 @@ export async function runSync(
   });
 
   onProgress?.({ step: 5, message: 'Verifying milestones and releasing grants...' });
-  const payoutAddressReadiness = new Map<string, boolean>();
 
   for (const record of validVaccinations) {
     try {
@@ -504,41 +633,49 @@ export async function runSync(
       let grantTxHash = mockTxHash(`${patient.id}-${milestone.id}`);
 
       if (onChain) {
-        const patientPayoutAddress = await resolvePatientPayoutAddress(patient);
-        if (!patientPayoutAddress) {
+        const payoutResolution = await resolvePatientPayoutAddress(patient);
+        if (!payoutResolution.address) {
           errors.push(
-            `Milestone processing skipped for ${record.id}: patient ${patient.healthDropId} has no initialized XION payout wallet linked to this profile.`
+            `Milestone processing skipped for ${record.id}: patient ${patient.healthDropId} has no eligible payout wallet. Source: ${payoutResolution.source}.`
           );
           continue;
         }
 
-        if (!payoutAddressReadiness.has(patientPayoutAddress)) {
-          try {
-            const payoutPreflight = await runSyncPreflight(patientPayoutAddress);
-            payoutAddressReadiness.set(patientPayoutAddress, payoutPreflight.accountExists);
-          } catch {
-            payoutAddressReadiness.set(patientPayoutAddress, false);
-          }
-        }
+        const patientPayoutAddress = payoutResolution.address;
+        const payoutClassification = classifyAddress(patientPayoutAddress, addressContext);
 
-        if (!payoutAddressReadiness.get(patientPayoutAddress)) {
+        if (!payoutClassification.requiresOnChainAccount) {
           errors.push(
-            `Milestone processing skipped for ${record.id}: payout wallet ${patientPayoutAddress} is not initialized on-chain.`
+            `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} from ${payoutResolution.source} is classified as ${payoutClassification.role} and treated as identity metadata.`
           );
           continue;
         }
 
-        const grantTx = await txCheckAndRelease(
-          signingClient,
-          senderAddress,
-          patientPayoutAddress,
-          patient.healthDropId,
-          record.vaccineName,
-          record.doseNumber,
-          patient.programId,
-          batchId
-        );
-        grantTxHash = grantTx.txHash;
+        try {
+          const grantTx = await txCheckAndRelease(
+            signingClient,
+            senderAddress,
+            patientPayoutAddress,
+            patient.healthDropId,
+            record.vaccineName,
+            record.doseNumber,
+            patient.programId,
+            batchId
+          );
+          grantTxHash = grantTx.txHash;
+        } catch (error: any) {
+          errors.push(
+            `Milestone processing skipped for ${record.id}: ${mapSyncError(error, {
+              senderAddress,
+              stage: 'milestone',
+              contractName: 'MilestoneChecker',
+              address: patientPayoutAddress,
+              role: payoutClassification.role,
+              classifyContext: addressContext,
+            })} Source: ${payoutResolution.source}.`
+          );
+          continue;
+        }
       }
 
       await db.grantReleases.put({
@@ -582,6 +719,8 @@ export async function runSync(
           stage: 'milestone',
           contractName: 'MilestoneChecker',
           address: XION.contracts.milestoneChecker,
+          role: 'contract',
+          classifyContext: addressContext,
         })}`
       );
     }
