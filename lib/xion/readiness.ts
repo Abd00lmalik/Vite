@@ -97,6 +97,10 @@ export async function validateContractsOnChain(
 
       if (!response.ok) {
         const message = `${payload?.message ?? ''}`.toLowerCase();
+        if (message.includes('bech32') || message.includes('invalid checksum') || message.includes('decoding')) {
+          failures.push({ envVar, address, reason: 'invalid_format' });
+          continue;
+        }
         if (message.includes('no such contract') || message.includes('not found')) {
           failures.push({ envVar, address, reason: 'not_found' });
           continue;

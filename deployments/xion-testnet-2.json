@@ -1,0 +1,33 @@
+{
+  "network": "xion-testnet-2",
+  "rpc": "https://rpc.xion-testnet-2.burnt.com:443",
+  "rest": "https://api.xion-testnet-2.burnt.com",
+  "chainId": "xion-testnet-2",
+  "verifiedAt": "2026-04-26T10:36:17Z",
+  "contracts": {
+    "IssuerRegistry": {
+      "address": "xion1e7chzwjakmf67g2pytcrkefxehxm26xp2w4v4vj5paeaw9v2zdlsesjqc6",
+      "codeId": "2146",
+      "label": "VITE-IssuerRegistry",
+      "creator": "xion1zx6x7nhvnp282fqspfd44alx90s4mhvkfzkemt"
+    },
+    "VaccinationRecord": {
+      "address": "xion1nwvuazzwesxssneed5xsgjxycqnadyknc6svq4kzeluhzwqnn2sspznurv",
+      "codeId": "2147",
+      "label": "VITE-VaccinationRecord",
+      "creator": "xion1zx6x7nhvnp282fqspfd44alx90s4mhvkfzkemt"
+    },
+    "MilestoneChecker": {
+      "address": "xion10fwl9vh9esdut8wl37d8p053hxw62thjg65xk26ejm0unpc767rs0qa0ff",
+      "codeId": "2148",
+      "label": "VITE-MilestoneChecker",
+      "creator": "xion1zx6x7nhvnp282fqspfd44alx90s4mhvkfzkemt"
+    },
+    "GrantEscrow": {
+      "address": "xion134x0ffm8xukyr2fqe8qwandw6gmv5makn53ja3yvaqrhhhhl7jdqmnhyj7",
+      "codeId": "2149",
+      "label": "VITE-GrantEscrow",
+      "creator": "xion1zx6x7nhvnp282fqspfd44alx90s4mhvkfzkemt"
+    }
+  }
+}
