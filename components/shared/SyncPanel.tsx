@@ -13,7 +13,12 @@ import { useAuthStore } from '@/store/authStore';
 import { useSyncStore } from '@/store/syncStore';
 import { isDemoAccount } from '@/lib/auth/demo';
 import { shortTxHash } from '@/lib/utils/format';
-import { getXionConfigStatus } from '@/lib/xion/readiness';
+import {
+  formatContractFailure,
+  getXionConfigStatus,
+  type ContractValidationFailure,
+  validateContractsOnChain,
+} from '@/lib/xion/readiness';
 import { toastErrorOnce } from '@/lib/utils/toastOnce';
 import {
   formatAccountNotInitializedMessage,
@@ -45,6 +50,8 @@ export function SyncPanel() {
   const [readiness, setReadiness] = useState<SyncPreflightResult | null>(null);
   const [isCheckingReadiness, setIsCheckingReadiness] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [contractFailures, setContractFailures] = useState<ContractValidationFailure[]>([]);
+  const [isCheckingContracts, setIsCheckingContracts] = useState(false);
   const [quarantineCount, setQuarantineCount] = useState(0);
   const isOnline = useOfflineStatus();
   const syncRef = useRef(false);
@@ -80,6 +87,10 @@ export function SyncPanel() {
     !!address &&
     readiness?.accountExists === true &&
     readiness?.hasMinimumBalance === false;
+  const walletReady =
+    !requiresOnchainSync ||
+    (!!address && readiness?.accountExists === true && readiness?.hasMinimumBalance === true);
+  const contractsReady = !requiresOnchainSync || contractFailures.length === 0;
 
   useEffect(() => {
     const connectedAddress = address;
@@ -134,6 +145,41 @@ export function SyncPanel() {
   }, [address, clearLastResult, configMissing, requiresOnchainSync]);
 
   useEffect(() => {
+    if (!requiresOnchainSync || configMissing || !walletReady) {
+      setContractFailures([]);
+      setIsCheckingContracts(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingContracts(true);
+
+    async function checkContracts() {
+      try {
+        const validation = await validateContractsOnChain(
+          {
+            vaccinationRecord: XION.contracts.vaccinationRecord,
+            milestoneChecker: XION.contracts.milestoneChecker,
+          },
+          XION.rest
+        );
+        if (cancelled) return;
+        setContractFailures(validation.failures);
+      } finally {
+        if (!cancelled) {
+          setIsCheckingContracts(false);
+        }
+      }
+    }
+
+    void checkContracts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [configMissing, requiresOnchainSync, walletReady]);
+
+  useEffect(() => {
     if (!session?.userId) {
       setQuarantineCount(0);
       return;
@@ -151,6 +197,16 @@ export function SyncPanel() {
       return;
     }
     if (walletMissing) {
+      return;
+    }
+    if (!contractsReady) {
+      setResult({
+        success: false,
+        recordCount: 0,
+        merkleRoot: '0x0',
+        mode: demoSession ? 'simulated' : 'onchain',
+        errors: contractFailures.map(formatContractFailure),
+      });
       return;
     }
 
@@ -243,18 +299,24 @@ export function SyncPanel() {
     configMissing ||
     walletMissing ||
     isCheckingReadiness ||
+    isCheckingContracts ||
     missingOnChainAccount ||
-    insufficientOnChainBalance;
+    insufficientOnChainBalance ||
+    !contractsReady;
   const syncDisabledReason = configMissing
     ? 'XION sync requires environment configuration. See setup guide.'
     : walletMissing
     ? 'Connect your XION wallet to enable sync.'
     : isCheckingReadiness
     ? 'Checking wallet readiness on XION...'
+    : isCheckingContracts
+    ? 'Validating XION contracts on-chain...'
     : missingOnChainAccount
     ? 'Wallet account is not initialized on-chain yet.'
     : insufficientOnChainBalance
     ? 'Insufficient UXION balance for gas fees.'
+    : !contractsReady
+    ? 'Fix contract configuration before syncing.'
     : readinessError
     ? 'Unable to verify wallet readiness right now.'
     : !isOnline
@@ -332,6 +394,17 @@ export function SyncPanel() {
         <p className="mt-2 rounded border border-who-red/20 bg-who-red-light p-2 text-xs text-who-red">
           {readinessError}
         </p>
+      ) : null}
+
+      {!configMissing && walletReady && contractFailures.length > 0 ? (
+        <div className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">
+          <p className="font-semibold">Contract verification failed on XION Testnet-2.</p>
+          {contractFailures.map((failure) => (
+            <p key={`${failure.envVar}:${failure.address}:${failure.reason}`} className="mt-1">
+              - {formatContractFailure(failure)}
+            </p>
+          ))}
+        </div>
       ) : null}
 
       {quarantineCount > 0 ? (

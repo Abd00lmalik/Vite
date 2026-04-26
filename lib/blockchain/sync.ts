@@ -22,6 +22,7 @@ import {
   runSyncPreflight,
   requiredSyncGasUxion,
 } from '@/lib/xion/preflight';
+import { formatContractFailure, validateContractsOnChain } from '@/lib/xion/readiness';
 import {
   classifyAddress,
   extractAddressFields,
@@ -504,6 +505,24 @@ export async function runSync(
             classifyContext: addressContext,
           }),
         ],
+      });
+    }
+
+    const contractValidation = await validateContractsOnChain(
+      {
+        vaccinationRecord: XION.contracts.vaccinationRecord,
+        milestoneChecker: XION.contracts.milestoneChecker,
+      },
+      XION.rest
+    );
+
+    if (!contractValidation.valid) {
+      return failureResult({
+        batchId: 'contract-validation-failed',
+        recordCount: scopedVaccinations.length,
+        merkleRoot: '0x0',
+        mode: 'onchain',
+        errors: contractValidation.failures.map(formatContractFailure),
       });
     }
   }
