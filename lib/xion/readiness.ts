@@ -124,15 +124,18 @@ export async function validateContractsOnChain(
 }
 
 export function formatContractFailure(failure: ContractValidationFailure): string {
+  const redeployNote =
+    'If you recently updated this variable in Vercel, you must redeploy with cleared cache for the change to take effect.';
+
   switch (failure.reason) {
     case 'empty':
-      return `${failure.envVar} is not set. Add the deployed contract address to your environment.`;
+      return `${failure.envVar} is not set in this build. Add the deployed contract address in Vercel → Project Settings → Environment Variables, then redeploy.`;
     case 'invalid_format':
-      return `${failure.envVar} contains an invalid address format ("${failure.address}"). It must be a valid xion1... address.`;
+      return `${failure.envVar} has an invalid value ("${failure.address}") in this build. It must be a valid xion1... address. ${redeployNote}`;
     case 'not_found':
-      return `${failure.envVar} points to an address (${failure.address}) that was not found on XION Testnet-2. Deploy the contract or update this variable.`;
+      return `${failure.envVar} is set to "${failure.address}" in this build, but that address was not found on XION Testnet-2. This may be a stale value from a previous Vercel build. ${redeployNote}`;
     case 'not_a_contract':
-      return `${failure.envVar} points to an address (${failure.address}) that exists on-chain but is not a deployed contract.`;
+      return `${failure.envVar} points to "${failure.address}" which exists on-chain but is not a deployed CosmWasm contract. Verify the correct contract address and redeploy.`;
     default:
       return `${failure.envVar} is invalid.`;
   }

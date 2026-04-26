@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import { UNSPLASH_IMAGES } from '@/lib/content/unsplash';
 import { SyncPanel } from '@/components/shared/SyncPanel';
+import { XionConfigDebug } from '@/components/debug/XionConfigDebug';
 import { NotificationBell } from '@/components/shared/NotificationBell';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 import { XionConnectButton } from '@/components/shared/XionConnectButton';
@@ -126,6 +127,7 @@ export function HWDashboard() {
         </Card>
 
         <SyncPanel />
+        <XionConfigDebug />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Link href="/health-worker/register">

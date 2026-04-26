@@ -21,6 +21,10 @@ const nextConfig = {
     ],
   },
   transpilePackages: ['recharts'],
+  // Stamp every build so the XionConfigDebug panel can confirm the deployment time.
+  env: {
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+  },
 };
 
 export default withPWA(nextConfig);
