@@ -60,12 +60,13 @@ export function SyncPanel() {
   const accountInitToastIdRef = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
   const configStatus = getXionConfigStatus();
+  const demoSession = isDemoAccount({ userId: session?.userId, demo: session?.demo });
+  const requiresOnchainSync = !demoSession;
   const configMissing = requiresOnchainSync && !configStatus.configReady;
   const walletMissing =
     requiresOnchainSync &&
     configStatus.configReady &&
     (!isConnected || !signingClient || !address);
-
   const pendingCount = useLiveQuery(async () => {
     if (!session?.userId) return 0;
     return countPendingSyncItemsForUser(session.userId);
