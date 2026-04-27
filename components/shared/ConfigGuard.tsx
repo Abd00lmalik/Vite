@@ -1,5 +1,5 @@
 'use client';
-import { getXionConfigStatus, REQUIRED_ENV_VARS } from '@/lib/xion/readiness';
+import { getXionConfigStatus, REQUIRED_XION_VARS } from '@/lib/xion/readiness';
 
 export function ConfigGuard({ children }: { children: React.ReactNode }) {
   const { configReady, missingVars } = getXionConfigStatus();
@@ -20,7 +20,7 @@ export function ConfigGuard({ children }: { children: React.ReactNode }) {
           </p>
           <div className="bg-ui-bg border border-ui-border rounded-lg p-4 text-left text-xs font-mono mb-6 space-y-1">
             <p className="text-ui-text-muted font-bold mb-2">Required environment variables:</p>
-            {REQUIRED_ENV_VARS.map(({ envName, description }) => {
+            {REQUIRED_XION_VARS.map(({ envName, description }) => {
               const isMissing = missingVars.includes(envName);
               return (
                 <div key={envName} className="flex items-start justify-between gap-4">

@@ -49,18 +49,7 @@ export const XION_ENV_NAME_BY_FIELD: Record<
   grantEscrow: 'NEXT_PUBLIC_XION_GRANT_ESCROW',
 };
 
-export const SYNC_REQUIRED_XION_FIELDS: (keyof XionConfig)[] = [
-  'rpcUrl',
-  'restUrl',
-  'chainId',
-  'vaccinationRecord',
-  'milestoneChecker',
-];
-
-export const SYNC_OPTIONAL_XION_FIELDS: (keyof XionConfig)[] = [
-  'issuerRegistry',
-  'grantEscrow',
-];
+import { getXionConfigStatus } from './readiness';
 
 export const XION = {
   rpc: xionConfig.rpcUrl || DEFAULT_RPC,
@@ -91,7 +80,7 @@ export function explorerAddrUrl(addr: string): string {
 }
 
 export function isSyncConfigured(): boolean {
-  return SYNC_REQUIRED_XION_FIELDS.every((field) => Boolean(xionConfig[field]));
+  return getXionConfigStatus().configReady;
 }
 
 export function isConfigured(): boolean {

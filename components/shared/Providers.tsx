@@ -14,7 +14,7 @@ const AbstraxionProvider = dynamic(
 
 const abstraxionConfig = {
   chainId:  XION.chainId,
-  treasury: XION.treasury,
+  ...(XION.treasury ? { treasury: XION.treasury } : {}),
   rpcUrl:   XION.rpc,
   restUrl:  XION.rest,
   gasPrice: XION.gasPrice,

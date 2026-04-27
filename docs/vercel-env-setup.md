@@ -30,7 +30,25 @@ NEXT_PUBLIC_XION_GAS_PRICE=0.001uxion
 NEXT_PUBLIC_XION_AUTH_APP_URL=https://auth.testnet.burnt.com
 NEXT_PUBLIC_USE_REAL_XION=true
 NEXT_PUBLIC_SHOW_XION_DEBUG=true
+
+# | NEXT_PUBLIC_XION_TREASURY_ADDRESS | OPTIONAL | Leave blank unless using grant-based Abstraxion signing. Health worker sync does not require this. Donor grant release flows may require it in a future phase. |
 ```
+
+## Troubleshooting: "XION configuration is incomplete" after setting all variables
+
+If this warning appears after setting all variables and redeploying:
+
+1. Check the XION Config Diagnostic panel — it shows which exact required variable is missing.
+2. Confirm the diagnostic panel shows all five required variables as ✓.
+3. If all five show ✓ but the warning still appears, clear browser site data and reload.
+4. If the warning disappears after clearing site data, a service worker was serving a stale bundle.
+
+The following variables will NOT cause this warning if missing — they are optional:
+- NEXT_PUBLIC_XION_TREASURY_ADDRESS
+- NEXT_PUBLIC_XION_ISSUER_REGISTRY
+- NEXT_PUBLIC_XION_GRANT_ESCROW
+- NEXT_PUBLIC_XION_GAS_PRICE
+- NEXT_PUBLIC_XION_AUTH_APP_URL
 
 ## Step 3 - Redeploy
 

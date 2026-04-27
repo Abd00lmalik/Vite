@@ -1,26 +1,20 @@
 import { xionConfig } from './config';
 
-export interface EnvVarDef {
-  key: keyof typeof xionConfig;
-  envName: string;
-  description: string;
-}
+export const REQUIRED_XION_VARS = [
+  { envName: 'NEXT_PUBLIC_XION_RPC_URL',            description: 'XION RPC endpoint' },
+  { envName: 'NEXT_PUBLIC_XION_REST_URL',           description: 'XION REST endpoint' },
+  { envName: 'NEXT_PUBLIC_XION_CHAIN_ID',           description: 'XION chain identifier' },
+  { envName: 'NEXT_PUBLIC_XION_VACCINATION_RECORD', description: 'VaccinationRecord contract address' },
+  { envName: 'NEXT_PUBLIC_XION_MILESTONE_CHECKER',  description: 'MilestoneChecker contract address' },
+] as const;
 
-export const REQUIRED_ENV_VARS: EnvVarDef[] = [
-  { key: 'rpcUrl',            envName: 'NEXT_PUBLIC_XION_RPC_URL',             description: 'XION RPC endpoint' },
-  { key: 'restUrl',           envName: 'NEXT_PUBLIC_XION_REST_URL',            description: 'XION REST endpoint' },
-  { key: 'chainId',           envName: 'NEXT_PUBLIC_XION_CHAIN_ID',            description: 'XION chain identifier' },
-  { key: 'vaccinationRecord', envName: 'NEXT_PUBLIC_XION_VACCINATION_RECORD',   description: 'VaccinationRecord contract' },
-  { key: 'milestoneChecker',  envName: 'NEXT_PUBLIC_XION_MILESTONE_CHECKER',    description: 'MilestoneChecker contract' },
-];
-
-export const OPTIONAL_ENV_VARS: EnvVarDef[] = [
-  { key: 'issuerRegistry',    envName: 'NEXT_PUBLIC_XION_ISSUER_REGISTRY',     description: 'IssuerRegistry contract' },
-  { key: 'grantEscrow',       envName: 'NEXT_PUBLIC_XION_GRANT_ESCROW',        description: 'GrantEscrow contract' },
-  { key: 'gasPrice',          envName: 'NEXT_PUBLIC_XION_GAS_PRICE',           description: 'Gas price (defaults to 0.001uxion)' },
-  { key: 'authAppUrl',        envName: 'NEXT_PUBLIC_XION_AUTH_APP_URL',        description: 'Abstraxion auth app URL' },
-  { key: 'treasuryAddress',   envName: 'NEXT_PUBLIC_XION_TREASURY_ADDRESS',    description: 'Treasury address' },
-];
+export const OPTIONAL_XION_VARS = [
+  { envName: 'NEXT_PUBLIC_XION_ISSUER_REGISTRY',   description: 'IssuerRegistry contract (optional — enables issuer verification)' },
+  { envName: 'NEXT_PUBLIC_XION_GRANT_ESCROW',      description: 'GrantEscrow contract (optional — enables donor milestone releases)' },
+  { envName: 'NEXT_PUBLIC_XION_GAS_PRICE',         description: 'Gas price override (optional — defaults to 0.001uxion)' },
+  { envName: 'NEXT_PUBLIC_XION_AUTH_APP_URL',      description: 'Abstraxion auth app URL (optional — has safe default)' },
+  { envName: 'NEXT_PUBLIC_XION_TREASURY_ADDRESS',  description: 'Treasury address (optional — only required for grant-based signing)' },
+] as const;
 
 export interface ContractValidationFailure {
   envVar: string;
@@ -47,24 +41,19 @@ export function isMissing(value: any): boolean {
   return false;
 }
 
-/**
- * Evaluates the current configuration state.
- * Returns exactly which required and optional variables are missing.
- */
-export function getXionConfigStatus() {
-  const missingVars = REQUIRED_ENV_VARS
-    .filter(({ key }) => isMissing(xionConfig[key]))
+export function getXionConfigStatus(): { configReady: boolean; missingVars: string[] } {
+  const missingVars = REQUIRED_XION_VARS
+    .filter(({ envName }) => isMissing(process.env[envName]))
     .map(({ envName }) => envName);
+  return { configReady: missingVars.length === 0, missingVars };
+}
 
-  const missingOptionalVars = OPTIONAL_ENV_VARS
-    .filter(({ key }) => isMissing(xionConfig[key]))
-    .map(({ envName }) => envName);
-    
-  return { 
-    configReady: missingVars.length === 0, 
-    missingVars,
-    missingOptionalVars
-  };
+export function getOptionalXionVarStatus(): Array<{ envName: string; present: boolean; description: string }> {
+  return OPTIONAL_XION_VARS.map(({ envName, description }) => ({
+    envName,
+    present: !isMissing(process.env[envName]),
+    description,
+  }));
 }
 
 /**

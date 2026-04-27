@@ -1,7 +1,7 @@
 'use client';
 
-import { REQUIRED_ENV_VARS, OPTIONAL_ENV_VARS, isMissing } from '@/lib/xion/readiness';
-import { xionConfig } from '@/lib/xion/config';
+import { REQUIRED_XION_VARS, OPTIONAL_XION_VARS, isMissing, getXionConfigStatus, getOptionalXionVarStatus } from '@/lib/xion/readiness';
+import { useXion } from '@/hooks/useXion';
 
 const DEBUG_ENABLED =
   process.env.NODE_ENV !== 'production' ||
@@ -21,10 +21,20 @@ function maskValue(val: any): string {
 }
 
 export function XionConfigDebug() {
+  const { isConnected } = useXion();
   if (!DEBUG_ENABLED) return null;
 
   const buildTime = process.env.NEXT_PUBLIC_BUILD_TIME ?? 'unknown';
   const nodeEnv = process.env.NODE_ENV;
+  
+  const { configReady, missingVars } = getXionConfigStatus();
+  const optionalStatus = getOptionalXionVarStatus();
+  const missingOptional = optionalStatus.filter(v => !v.present);
+  
+  const syncAllowed = configReady && isConnected;
+  let syncBlockReason = '';
+  if (!configReady) syncBlockReason = `Missing required vars: ${missingVars.join(', ')}`;
+  else if (!isConnected) syncBlockReason = 'Wallet not connected';
 
   return (
     <details className="border border-yellow-300 bg-yellow-50 rounded-lg p-4 text-xs font-mono mt-4" open>
@@ -35,9 +45,11 @@ export function XionConfigDebug() {
         <div className="text-yellow-700 font-bold">Build: {buildTime} | Env: {nodeEnv}</div>
         <hr className="border-yellow-200 my-2" />
         
-        <div className="font-bold text-yellow-800 mb-1">Required variables:</div>
-        {REQUIRED_ENV_VARS.map(({ key, envName, description }) => {
-          const val = xionConfig[key];
+        <div className="font-bold text-yellow-800 mb-1">
+          Required config: {configReady ? '✓ Complete' : '✗ Incomplete'}
+        </div>
+        {REQUIRED_XION_VARS.map(({ envName, description }) => {
+          const val = process.env[envName];
           const missing = isMissing(val);
           return (
             <div key={envName} className={missing ? 'text-red-600' : 'text-green-700'}>
@@ -48,9 +60,11 @@ export function XionConfigDebug() {
         
         <hr className="border-yellow-200 my-2" />
         
-        <div className="font-bold text-yellow-700 mb-1">Optional variables:</div>
-        {OPTIONAL_ENV_VARS.map(({ key, envName, description }) => {
-          const val = xionConfig[key];
+        <div className="font-bold text-yellow-700 mb-1">
+          Optional config: {OPTIONAL_XION_VARS.length - missingOptional.length} of {OPTIONAL_XION_VARS.length} present
+        </div>
+        {OPTIONAL_XION_VARS.map(({ envName, description }) => {
+          const val = process.env[envName];
           const missing = isMissing(val);
           return (
             <div key={envName} className={missing ? 'text-gray-400' : 'text-green-600'}>
@@ -58,6 +72,15 @@ export function XionConfigDebug() {
             </div>
           );
         })}
+        
+        <hr className="border-yellow-200 my-2" />
+        
+        <div className="font-bold text-yellow-800 mb-1">
+          Sync allowed: {syncAllowed ? 'Yes' : 'No'}
+        </div>
+        {!syncAllowed && (
+          <div className="text-red-600">— Reason: {syncBlockReason}</div>
+        )}
         
         <hr className="border-yellow-200 my-2" />
         <div className="text-[10px] text-yellow-600 italic leading-tight">

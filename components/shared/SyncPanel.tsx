@@ -16,6 +16,7 @@ import { shortTxHash } from '@/lib/utils/format';
 import {
   formatContractFailure,
   getXionConfigStatus,
+  getOptionalXionVarStatus,
   type ContractValidationFailure,
   validateContractsOnChain,
 } from '@/lib/xion/readiness';
@@ -60,6 +61,8 @@ export function SyncPanel() {
   const accountInitToastIdRef = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
   const configStatus = getXionConfigStatus();
+  const optionalVars = getOptionalXionVarStatus();
+  const missingOptionalVars = optionalVars.filter(v => !v.present).map(v => v.envName);
   const demoSession = isDemoAccount({ userId: session?.userId, demo: session?.demo });
   const requiresOnchainSync = !demoSession;
   const configMissing = requiresOnchainSync && !configStatus.configReady;
@@ -360,9 +363,9 @@ export function SyncPanel() {
         </div>
       ) : null}
 
-      {!configMissing && configStatus.missingOptionalVars.length > 0 && SHOW_XION_DEBUG ? (
+      {!configMissing && missingOptionalVars.length > 0 && SHOW_XION_DEBUG ? (
         <p className="mt-2 rounded border border-ui-border bg-ui-surface p-2 text-xs text-ui-text-muted">
-          Optional XION features not configured: {configStatus.missingOptionalVars.join(', ')}.
+          Optional XION features not configured: {missingOptionalVars.join(', ')}.
           Sync can still run.
         </p>
       ) : null}
