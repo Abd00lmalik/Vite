@@ -52,8 +52,17 @@ export function XionConfigDebug() {
           const val = process.env[envName];
           const missing = isMissing(val);
           return (
-            <div key={envName} className={missing ? 'text-red-600' : 'text-green-700'}>
-              {missing ? '✗' : '✓'} {envName}: {maskValue(val)} — {description}
+            <div key={envName} className="mb-2">
+              <div className={missing ? 'text-red-600' : 'text-green-700'}>
+                {missing ? '✗' : '✓'} {envName}: {maskValue(val)} — {description}
+              </div>
+              {missing && (
+                <div className="text-[10px] text-red-500 ml-4 mt-1">
+                  This variable was not present when this bundle was built.
+                  If you have already added it in Vercel, you must redeploy with build cache disabled.
+                  Fetch <a href="/xion-build-diagnostic.json" target="_blank" className="underline">/xion-build-diagnostic.json</a> to confirm what this build received.
+                </div>
+              )}
             </div>
           );
         })}
@@ -86,6 +95,15 @@ export function XionConfigDebug() {
         <div className="text-[10px] text-yellow-600 italic leading-tight">
           Note: NEXT_PUBLIC_* variables are baked at build time. After changing them in Vercel, 
           you must redeploy with build cache disabled.
+        </div>
+        <div className="mt-2 text-right">
+          <a
+            href="/xion-build-diagnostic.json"
+            target="_blank"
+            className="text-yellow-700 underline text-xs font-semibold"
+          >
+            View raw build diagnostic →
+          </a>
         </div>
       </div>
     </details>

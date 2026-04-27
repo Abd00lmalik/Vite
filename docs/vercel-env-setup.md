@@ -50,62 +50,52 @@ The following variables will NOT cause this warning if missing — they are opti
 - NEXT_PUBLIC_XION_GAS_PRICE
 - NEXT_PUBLIC_XION_AUTH_APP_URL
 
-## Step 3 - Redeploy
+## Why Variables Set in Vercel Are Not Appearing in the App
 
-1. Go to Vercel -> Deployments
-2. Click the three-dot menu on the latest deployment
-3. Select "Redeploy" -> uncheck "Use build cache"
-4. Wait for deployment to complete
+NEXT_PUBLIC_* variables in Next.js are statically replaced in the JavaScript bundle
+at build time — they are NOT read at runtime. This means:
 
-## Step 4 - Verify after redeploy
+- Adding a variable in Vercel does NOT update the running app automatically.
+- The variable only takes effect in the next build that runs AFTER it was added.
+- If Vercel serves a cached build, the new variable will not appear even after adding it.
 
-1. Open `https://your-app.vercel.app/health-worker`
-2. Look at the **XION Config Diagnostic** panel (appears if `NEXT_PUBLIC_SHOW_XION_DEBUG=true`)
-3. Confirm **Build time** is current
-4. Confirm all **Required variables** show a green checkmark (✓)
-5. If any show a red X (✗), verify the name and value in Vercel settings and redeploy again
+## Exact Redeploy Procedure (follow every step)
 
----
+1. Go to Vercel → Your Project → Settings → Environment Variables
+2. Confirm each required variable is set and the value is not blank:
+   - NEXT_PUBLIC_XION_RPC_URL
+   - NEXT_PUBLIC_XION_REST_URL
+   - NEXT_PUBLIC_XION_CHAIN_ID
+   - NEXT_PUBLIC_XION_VACCINATION_RECORD
+   - NEXT_PUBLIC_XION_MILESTONE_CHECKER
+3. Confirm the scope is set to "Production" (and "Preview" if you test on preview URLs)
+4. Go to Vercel → Your Project → Deployments
+5. Click the three-dot menu on the latest deployment
+6. Select "Redeploy"
+7. In the redeploy dialog: UNCHECK "Use build cache" — this is mandatory
+8. Click "Redeploy" and wait for the build to complete
+9. In the Vercel build log, find the "XION Environment Verification" section
+   - It will show ✓ or ✗ MISSING for each required variable
+   - If any show ✗ MISSING, the variable was not available to the build
+   - This means the variable scope is wrong or the value is blank in Vercel
+10. After deployment completes, open: https://your-app.vercel.app/xion-build-diagnostic.json
+    - Confirm all required vars show "SET"
+    - If any show "MISSING", repeat from step 2
+11. Open the app → /health-worker
+    - The XION Config Diagnostic panel must show all required vars as ✓
+    - The build time must be AFTER you added the variables in Vercel
 
-## Clearing Stale Client State
+## If Variables Show ✗ MISSING in the Build Log
 
-If sync fails with a contract address that does **not** match your current Vercel environment
-variables (i.e. you can see the correct address in the XION Config Diagnostic panel but the error
-shows a different address), a **service worker is serving a stale JavaScript bundle** from the
-browser cache.
+The variable existed in Vercel settings but the build did not receive it. Check:
+- Is the variable scoped to Production? Preview? Both?
+- Is the value blank or whitespace-only in Vercel?
+- Is there a .env.production file in the repo that overrides the value with blank?
+- Is the app deployed from the correct Vercel project (not a fork or duplicate)?
 
-`NEXT_PUBLIC_*` variables are baked into JS chunks at build time. If a user loaded the app
-before your Vercel redeploy, their browser's service worker may be serving the old bundle with
-the old (wrong) contract address even after Vercel has the new build live.
+## After Deployment — Clear Browser Cache
 
-### How to clear the stale bundle (user action)
-
-**Option A — DevTools (recommended for debugging):**
-1. Open browser DevTools → Application → Service Workers
-2. Click **Unregister** next to the app's service worker
-3. Open Application → Storage → click **Clear site data**
-4. Hard-reload the page (`Ctrl+Shift+R` / `Cmd+Shift+R`)
-5. The browser will fetch the latest bundle from Vercel
-
-**Option B — DevTools (quick):**
-1. DevTools → Application → Storage
-2. Check all boxes → click **Clear site data**
-3. Reload
-
-### Why this happens
-
-The app uses a PWA service worker (`next-pwa`) which precaches JS chunks. As of the latest updates,
-JS bundles are fetched using **NetworkFirst** strategy (timeout: 3 s) instead of
-StaleWhileRevalidate. This means after your next Vercel deploy, all users will automatically
-receive the new bundle on their first load after the deploy.
-
-Existing users who opened the app *before* the NetworkFirst patch was deployed may still see the old
-StaleWhileRevalidate behaviour. A one-time cache clear (Option A/B above) will fix them.
-
-### How to identify a stale bundle
-
-On the `/health-worker` page with `NEXT_PUBLIC_SHOW_XION_DEBUG=true`:
-
-- Check the **XION Config Diagnostic** panel — shows the contract addresses baked into this build
-- If **Build time** in the diagnostic panel shows a date before your latest Vercel deployment, the
-  service worker is serving a stale bundle — clear site data and reload
+If the app still shows old config after a successful redeploy:
+1. Open browser DevTools → Application → Service Workers → Unregister all
+2. Open DevTools → Application → Storage → Clear site data
+3. Hard reload: Ctrl+Shift+R (Windows/Linux) or Cmd+Shift+R (Mac)
