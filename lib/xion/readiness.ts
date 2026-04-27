@@ -1,22 +1,31 @@
-import {
-  xionConfig,
-  XION_ENV_NAME_BY_FIELD,
-  SYNC_OPTIONAL_XION_FIELDS,
-  SYNC_REQUIRED_XION_FIELDS,
-} from './config';
+import { xionConfig } from './config';
 
-export interface XionConfigStatus {
-  configReady: boolean;
-  missingVars: string[];
-  missingOptionalVars: string[];
+export interface EnvVarDef {
+  key: keyof typeof xionConfig;
+  envName: string;
+  description: string;
 }
 
-export type ContractFailureReason = 'not_found' | 'not_a_contract' | 'empty' | 'invalid_format';
+export const REQUIRED_ENV_VARS: EnvVarDef[] = [
+  { key: 'rpcUrl',            envName: 'NEXT_PUBLIC_XION_RPC_URL',             description: 'XION RPC endpoint' },
+  { key: 'restUrl',           envName: 'NEXT_PUBLIC_XION_REST_URL',            description: 'XION REST endpoint' },
+  { key: 'chainId',           envName: 'NEXT_PUBLIC_XION_CHAIN_ID',            description: 'XION chain identifier' },
+  { key: 'vaccinationRecord', envName: 'NEXT_PUBLIC_XION_VACCINATION_RECORD',   description: 'VaccinationRecord contract' },
+  { key: 'milestoneChecker',  envName: 'NEXT_PUBLIC_XION_MILESTONE_CHECKER',    description: 'MilestoneChecker contract' },
+];
+
+export const OPTIONAL_ENV_VARS: EnvVarDef[] = [
+  { key: 'issuerRegistry',    envName: 'NEXT_PUBLIC_XION_ISSUER_REGISTRY',     description: 'IssuerRegistry contract' },
+  { key: 'grantEscrow',       envName: 'NEXT_PUBLIC_XION_GRANT_ESCROW',        description: 'GrantEscrow contract' },
+  { key: 'gasPrice',          envName: 'NEXT_PUBLIC_XION_GAS_PRICE',           description: 'Gas price (defaults to 0.001uxion)' },
+  { key: 'authAppUrl',        envName: 'NEXT_PUBLIC_XION_AUTH_APP_URL',        description: 'Abstraxion auth app URL' },
+  { key: 'treasuryAddress',   envName: 'NEXT_PUBLIC_XION_TREASURY_ADDRESS',    description: 'Treasury address' },
+];
 
 export interface ContractValidationFailure {
   envVar: string;
   address: string;
-  reason: ContractFailureReason;
+  reason: 'not_found' | 'not_a_contract' | 'empty' | 'invalid_format';
 }
 
 export interface ContractValidationResult {
@@ -24,34 +33,43 @@ export interface ContractValidationResult {
   failures: ContractValidationFailure[];
 }
 
-export function getXionConfigStatus(): XionConfigStatus {
-  const missingVars = SYNC_REQUIRED_XION_FIELDS
-    .filter((key) => !xionConfig[key])
-    .map((key) => XION_ENV_NAME_BY_FIELD[key as keyof typeof XION_ENV_NAME_BY_FIELD] ?? String(key));
+/**
+ * Robust check for missing environment variables.
+ * Handles undefined, null, empty strings, whitespace, and placeholder sentinels.
+ */
+export function isMissing(value: any): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== 'string') return false; // Handles booleans or other types
+  const trimmed = value.trim();
+  if (trimmed === '') return true;
+  if (trimmed.startsWith('REQUIRED_INPUT_')) return true;
+  if (trimmed === 'undefined') return true;
+  return false;
+}
 
-  const missingOptionalVars = SYNC_OPTIONAL_XION_FIELDS
-    .filter((key) => !xionConfig[key])
-    .map((key) => XION_ENV_NAME_BY_FIELD[key as keyof typeof XION_ENV_NAME_BY_FIELD] ?? String(key));
+/**
+ * Evaluates the current configuration state.
+ * Returns exactly which required and optional variables are missing.
+ */
+export function getXionConfigStatus() {
+  const missingVars = REQUIRED_ENV_VARS
+    .filter(({ key }) => isMissing(xionConfig[key]))
+    .map(({ envName }) => envName);
 
-  return {
-    configReady: missingVars.length === 0,
+  const missingOptionalVars = OPTIONAL_ENV_VARS
+    .filter(({ key }) => isMissing(xionConfig[key]))
+    .map(({ envName }) => envName);
+    
+  return { 
+    configReady: missingVars.length === 0, 
     missingVars,
-    missingOptionalVars,
+    missingOptionalVars
   };
 }
 
-function isLikelyXionAddress(address: string): boolean {
-  return address.startsWith('xion1') && address.length >= 40;
-}
-
-async function parseJsonSafe(response: Response): Promise<any> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Validates provided contract addresses on-chain.
+ */
 export async function validateContractsOnChain(
   contracts: {
     vaccinationRecord: string;
@@ -78,7 +96,7 @@ export async function validateContractsOnChain(
       continue;
     }
 
-    if (!isLikelyXionAddress(address)) {
+    if (!address.startsWith('xion1') || address.length < 40) {
       failures.push({ envVar, address, reason: 'invalid_format' });
       continue;
     }
@@ -88,28 +106,14 @@ export async function validateContractsOnChain(
         method: 'GET',
         cache: 'no-store',
       });
-      const payload = await parseJsonSafe(response);
-
+      
       if (response.status === 404) {
         failures.push({ envVar, address, reason: 'not_found' });
         continue;
       }
 
-      if (!response.ok) {
-        const message = `${payload?.message ?? ''}`.toLowerCase();
-        if (message.includes('bech32') || message.includes('invalid checksum') || message.includes('decoding')) {
-          failures.push({ envVar, address, reason: 'invalid_format' });
-          continue;
-        }
-        if (message.includes('no such contract') || message.includes('not found')) {
-          failures.push({ envVar, address, reason: 'not_found' });
-          continue;
-        }
-        failures.push({ envVar, address, reason: 'not_a_contract' });
-        continue;
-      }
-
-      if (!payload?.contract_info?.code_id) {
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.contract_info?.code_id) {
         failures.push({ envVar, address, reason: 'not_a_contract' });
       }
     } catch {
@@ -124,18 +128,17 @@ export async function validateContractsOnChain(
 }
 
 export function formatContractFailure(failure: ContractValidationFailure): string {
-  const redeployNote =
-    'If you recently updated this variable in Vercel, you must redeploy with cleared cache for the change to take effect.';
+  const redeployNote = 'If you recently updated this variable in Vercel, you must redeploy with cleared cache.';
 
   switch (failure.reason) {
     case 'empty':
-      return `${failure.envVar} is not set in this build. Add the deployed contract address in Vercel → Project Settings → Environment Variables, then redeploy.`;
+      return `${failure.envVar} is not set. Add it in Vercel and redeploy.`;
     case 'invalid_format':
-      return `${failure.envVar} has an invalid value ("${failure.address}") in this build. It must be a valid xion1... address. ${redeployNote}`;
+      return `${failure.envVar} ("${failure.address}") is not a valid xion1... address. ${redeployNote}`;
     case 'not_found':
-      return `${failure.envVar} is set to "${failure.address}" in this build, but that address was not found on XION Testnet-2. This may be a stale value from a previous Vercel build. ${redeployNote}`;
+      return `${failure.envVar} ("${failure.address}") was not found on XION Testnet-2. ${redeployNote}`;
     case 'not_a_contract':
-      return `${failure.envVar} points to "${failure.address}" which exists on-chain but is not a deployed CosmWasm contract. Verify the correct contract address and redeploy.`;
+      return `${failure.envVar} ("${failure.address}") is not a valid contract. ${redeployNote}`;
     default:
       return `${failure.envVar} is invalid.`;
   }

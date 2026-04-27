@@ -1,9 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Toaster } from 'react-hot-toast';
 import { DbInit } from './DbInit';
 import { XION } from '@/lib/xion/config';
+import { clearLegacyContractCache } from '@/lib/xion/clearLegacyContractCache';
 
 const AbstraxionProvider = dynamic(
   () => import('@burnt-labs/abstraxion').then((mod) => mod.AbstraxionProvider),
@@ -27,6 +29,11 @@ const abstraxionConfig = {
 };
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    // Audit and clear legacy contract caches on startup to prevent stale overrides.
+    clearLegacyContractCache();
+  }, []);
+
   return (
     <AbstraxionProvider config={abstraxionConfig}>
       <DbInit />

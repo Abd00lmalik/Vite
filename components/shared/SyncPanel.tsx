@@ -26,8 +26,10 @@ import {
   runSyncPreflight,
   type SyncPreflightResult,
 } from '@/lib/xion/preflight';
-import { XION } from '@/lib/xion/config';
+import { XION, xionConfig } from '@/lib/xion/config';
 import { clearSyncQueueQuarantine, getSyncQueueQuarantine } from '@/lib/db/syncQueueSanitizer';
+
+const SHOW_XION_DEBUG = process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true';
 
 const STEP_LABELS: Record<SyncProgressUpdate['step'], string> = {
   1: 'Gathering pending records',
@@ -57,14 +59,7 @@ export function SyncPanel() {
   const syncRef = useRef(false);
   const accountInitToastIdRef = useRef<string | undefined>(undefined);
   const reduceMotion = useReducedMotion();
-  const configStatusRef = useRef<ReturnType<typeof getXionConfigStatus> | null>(null);
-  if (!configStatusRef.current) {
-    configStatusRef.current = getXionConfigStatus();
-  }
-
-  const demoSession = isDemoAccount({ userId: session?.userId, demo: session?.demo });
-  const requiresOnchainSync = !demoSession;
-  const configStatus = configStatusRef.current!;
+  const configStatus = getXionConfigStatus();
   const configMissing = requiresOnchainSync && !configStatus.configReady;
   const walletMissing =
     requiresOnchainSync &&
@@ -352,16 +347,19 @@ export function SyncPanel() {
       </div>
 
       {configMissing ? (
-        <p className="rounded border border-who-orange/20 bg-who-orange-light p-3 text-xs leading-relaxed text-who-orange">
+        <div className="rounded border border-who-orange/20 bg-who-orange-light p-3 text-xs leading-relaxed text-who-orange">
           <strong className="font-semibold">XION sync is not configured.</strong>
-          <br />
-          Missing: {configStatus.missingVars.join(', ')}
-          <br />
-          Offline registration and vaccination recording are unaffected.
-        </p>
+          <p className="mt-1">The following required environment variables are missing:</p>
+          <ul className="mt-1 list-inside list-disc">
+            {configStatus.missingVars.map(v => <li key={v}>{v}</li>)}
+          </ul>
+          <p className="mt-2 text-[10px] opacity-80 italic">
+            Set these in Vercel → Project Settings → Environment Variables, then redeploy with "Clear Build Cache" enabled.
+          </p>
+        </div>
       ) : null}
 
-      {!configMissing && configStatus.missingOptionalVars.length > 0 ? (
+      {!configMissing && configStatus.missingOptionalVars.length > 0 && SHOW_XION_DEBUG ? (
         <p className="mt-2 rounded border border-ui-border bg-ui-surface p-2 text-xs text-ui-text-muted">
           Optional XION features not configured: {configStatus.missingOptionalVars.join(', ')}.
           Sync can still run.
@@ -420,6 +418,38 @@ export function SyncPanel() {
             Clear quarantined records
           </button>
         </div>
+      ) : null}
+
+      {SHOW_XION_DEBUG ? (
+        <details className="mt-3 rounded border border-yellow-300 bg-yellow-50 p-3 text-xs font-mono text-yellow-900">
+          <summary className="cursor-pointer font-semibold text-yellow-800">
+            Sync Address Diagnostics
+          </summary>
+          <div className="mt-2 space-y-1">
+            <div>
+              <span className="font-bold">VaccinationRecord (env):</span>{' '}
+              {xionConfig.vaccinationRecord || <span className="text-red-600">⚠ NOT SET</span>}
+            </div>
+            <div>
+              <span className="font-bold">MilestoneChecker (env):</span>{' '}
+              {xionConfig.milestoneChecker || <span className="text-red-600">⚠ NOT SET</span>}
+            </div>
+            <div>
+              <span className="font-bold">IssuerRegistry (env):</span>{' '}
+              {xionConfig.issuerRegistry || <span className="text-red-600">⚠ NOT SET</span>}
+            </div>
+            <div>
+              <span className="font-bold">GrantEscrow (env):</span>{' '}
+              {xionConfig.grantEscrow || <span className="text-red-600">⚠ NOT SET</span>}
+            </div>
+            <hr className="border-yellow-300 my-1" />
+            <div className="text-yellow-700 text-[10px]">
+              Source: NEXT_PUBLIC_XION_* env vars baked at build time.
+              Build: {process.env.NEXT_PUBLIC_BUILD_TIME ?? 'unknown'}.
+              If these differ from your Vercel settings, clear site data and reload.
+            </div>
+          </div>
+        </details>
       ) : null}
 
       {syncDisabledReason ? (

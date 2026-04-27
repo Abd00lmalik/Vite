@@ -4,7 +4,7 @@ import type { AuthSession } from '@/types';
 import { useSyncStore } from './syncStore';
 import { useNotificationStore } from './notificationStore';
 import { clearLegacyGlobalDataKeys } from '@/lib/storage/scopedStorage';
-import { sanitizeSyncQueue } from '@/lib/db/syncQueueSanitizer';
+import { sanitizeSyncQueue, migrateAndCleanSyncQueue } from '@/lib/db/syncQueueSanitizer';
 
 interface AuthState {
   session: AuthSession | null;
@@ -23,6 +23,7 @@ export const useAuthStore = create<AuthState>()(
         useNotificationStore.getState().resetStore();
         clearLegacyGlobalDataKeys();
         void sanitizeSyncQueue(session.userId, { isDemoUser: Boolean(session.demo) });
+        void migrateAndCleanSyncQueue(session.userId);
         set({ session, isAuthenticated: true });
       },
       logout: () => {

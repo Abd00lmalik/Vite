@@ -12,7 +12,7 @@ import {
   markSyncQueueSynced,
   markVaccinationSynced,
 } from '@/lib/db/db';
-import { sanitizeSyncQueue } from '@/lib/db/syncQueueSanitizer';
+import { migrateAndCleanSyncQueue, sanitizeSyncQueue } from '@/lib/db/syncQueueSanitizer';
 import { SMS } from '@/lib/notifications/sms';
 import { scheduleReminder } from '@/lib/notifications/reminders';
 import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
@@ -349,6 +349,37 @@ export async function runSync(
   const demoAccount = Boolean(session.demo) || isDemoSession({ userId: session.userId } as any);
   const onChain = !demoAccount;
   const addressContext = buildAddressClassificationContext(senderAddress, XION.contracts, demoAccount);
+  // ── Diagnostic: log every contract address used at execution time ──────────
+  // Visible in browser DevTools console. When NEXT_PUBLIC_SHOW_XION_DEBUG=true
+  // these values are also shown in the SyncPanel debug block.
+  const contractAddressSource = {
+    vaccinationRecord: {
+      value: XION.contracts.vaccinationRecord || '(empty)',
+      source: 'env:NEXT_PUBLIC_XION_VACCINATION_RECORD',
+    },
+    milestoneChecker: {
+      value: XION.contracts.milestoneChecker || '(empty)',
+      source: 'env:NEXT_PUBLIC_XION_MILESTONE_CHECKER',
+    },
+    issuerRegistry: {
+      value: XION.contracts.issuerRegistry || '(empty)',
+      source: 'env:NEXT_PUBLIC_XION_ISSUER_REGISTRY',
+    },
+    grantEscrow: {
+      value: XION.contracts.grantEscrow || '(empty)',
+      source: 'env:NEXT_PUBLIC_XION_GRANT_ESCROW',
+    },
+  };
+  console.log('[Sync] Contract addresses at execution time:', JSON.stringify(contractAddressSource, null, 2));
+
+  // ── Migration: strip any stale contract fields from stored records ─────────
+  // Must run before sanitizeSyncQueue so suspicious records are quarantined with
+  // the correct reason rather than masked by the demo/ownership check.
+  const migrationResult = await migrateAndCleanSyncQueue(session.userId);
+  if (migrationResult.cleanedCount > 0 || migrationResult.quarantinedCount > 0) {
+    console.warn('[Sync] migrateAndCleanSyncQueue:', migrationResult);
+  }
+
   const sanitizeResult = await sanitizeSyncQueue(session.userId, { isDemoUser: demoAccount });
   if (sanitizeResult.quarantinedCount > 0) {
     errors.push(
@@ -562,6 +593,11 @@ export async function runSync(
 
   if (onChain) {
     try {
+      // ── TRACE: Ground truth contract address audit ─────────────────────────
+      console.log('[SyncTrace] Executing txSubmitBatch');
+      console.log('[SyncTrace] Address used:', XION.contracts.vaccinationRecord);
+      console.log('[SyncTrace] JS Source: XION.contracts.vaccinationRecord (lib/xion/config.ts)');
+
       const tx = await txSubmitBatch(
         signingClient,
         senderAddress,
