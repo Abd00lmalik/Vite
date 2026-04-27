@@ -432,19 +432,19 @@ export function SyncPanel() {
           <div className="mt-2 space-y-1">
             <div>
               <span className="font-bold">VaccinationRecord (env):</span>{' '}
-              {xionConfig.vaccinationRecord || <span className="text-red-600">⚠ NOT SET</span>}
+              {xionConfig.contracts.vaccinationRecord || <span className="text-red-600">⚠ NOT SET</span>}
             </div>
             <div>
               <span className="font-bold">MilestoneChecker (env):</span>{' '}
-              {xionConfig.milestoneChecker || <span className="text-red-600">⚠ NOT SET</span>}
+              {xionConfig.contracts.milestoneChecker || <span className="text-red-600">⚠ NOT SET</span>}
             </div>
             <div>
               <span className="font-bold">IssuerRegistry (env):</span>{' '}
-              {xionConfig.issuerRegistry || <span className="text-red-600">⚠ NOT SET</span>}
+              {xionConfig.contracts.issuerRegistry || <span className="text-red-600">⚠ NOT SET</span>}
             </div>
             <div>
               <span className="font-bold">GrantEscrow (env):</span>{' '}
-              {xionConfig.grantEscrow || <span className="text-red-600">⚠ NOT SET</span>}
+              {xionConfig.contracts.grantEscrow || <span className="text-red-600">⚠ NOT SET</span>}
             </div>
             <hr className="border-yellow-300 my-1" />
             <div className="text-yellow-700 text-[10px]">

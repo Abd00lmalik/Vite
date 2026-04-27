@@ -1,15 +1,11 @@
 'use client';
 
-import { REQUIRED_XION_VARS, OPTIONAL_XION_VARS, isMissing, getXionConfigStatus, getOptionalXionVarStatus } from '@/lib/xion/readiness';
+import { xionConfig } from '@/lib/xion/config';
+import { getXionConfigStatus, getOptionalXionVarStatus } from '@/lib/xion/readiness';
 import { useXion } from '@/hooks/useXion';
 
-const DEBUG_ENABLED =
-  process.env.NODE_ENV !== 'production' ||
-  process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true';
-
-function maskValue(val: any): string {
-  if (isMissing(val)) return '⚠ MISSING';
-  if (typeof val !== 'string') return String(val);
+function maskValue(val: string | undefined): string {
+  if (!val || val.trim() === '') return '⚠ MISSING';
   
   const str = val.trim();
   if (str.startsWith('xion1') && str.length > 20) {
@@ -22,19 +18,32 @@ function maskValue(val: any): string {
 
 export function XionConfigDebug() {
   const { isConnected } = useXion();
-  if (!DEBUG_ENABLED) return null;
+  
+  const showDebug =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true';
+
+  if (!showDebug) return null;
 
   const buildTime = process.env.NEXT_PUBLIC_BUILD_TIME ?? 'unknown';
   const nodeEnv = process.env.NODE_ENV;
   
   const { configReady, missingVars } = getXionConfigStatus();
   const optionalStatus = getOptionalXionVarStatus();
-  const missingOptional = optionalStatus.filter(v => !v.present);
   
   const syncAllowed = configReady && isConnected;
   let syncBlockReason = '';
   if (!configReady) syncBlockReason = `Missing required vars: ${missingVars.join(', ')}`;
   else if (!isConnected) syncBlockReason = 'Wallet not connected';
+
+  // Sourced from static literals in xionConfig
+  const requiredDisplay = [
+    { label: 'NEXT_PUBLIC_XION_RPC_URL',            value: xionConfig.rpcUrl,            desc: 'RPC endpoint' },
+    { label: 'NEXT_PUBLIC_XION_REST_URL',           value: xionConfig.restUrl,           desc: 'REST endpoint' },
+    { label: 'NEXT_PUBLIC_XION_CHAIN_ID',           value: xionConfig.chainId,           desc: 'Chain ID' },
+    { label: 'NEXT_PUBLIC_XION_VACCINATION_RECORD', value: xionConfig.contracts.vaccinationRecord, desc: 'VaccinationRecord' },
+    { label: 'NEXT_PUBLIC_XION_MILESTONE_CHECKER',  value: xionConfig.contracts.milestoneChecker,  desc: 'MilestoneChecker' },
+  ];
 
   return (
     <details className="border border-yellow-300 bg-yellow-50 rounded-lg p-4 text-xs font-mono mt-4" open>
@@ -43,44 +52,43 @@ export function XionConfigDebug() {
       </summary>
       <div className="space-y-1 mt-2">
         <div className="text-yellow-700 font-bold">Build: {buildTime} | Env: {nodeEnv}</div>
+        <div className="text-yellow-700 text-[10px] mt-1 mb-2 leading-relaxed">
+          Values shown below are what the client bundle actually resolved. 
+          If a value shows ⚠ MISSING but Vercel has it set, static replacement failed.
+          <a href="/xion-build-diagnostic.json" target="_blank" className="underline ml-1">
+            View build diagnostic →
+          </a>
+        </div>
+        
         <hr className="border-yellow-200 my-2" />
         
         <div className="font-bold text-yellow-800 mb-1">
           Required config: {configReady ? '✓ Complete' : '✗ Incomplete'}
         </div>
-        {REQUIRED_XION_VARS.map(({ envName, description }) => {
-          const val = process.env[envName];
-          const missing = isMissing(val);
-          return (
-            <div key={envName} className="mb-2">
-              <div className={missing ? 'text-red-600' : 'text-green-700'}>
-                {missing ? '✗' : '✓'} {envName}: {maskValue(val)} — {description}
-              </div>
-              {missing && (
-                <div className="text-[10px] text-red-500 ml-4 mt-1">
-                  This variable was not present when this bundle was built.
-                  If you have already added it in Vercel, you must redeploy with build cache disabled.
-                  Fetch <a href="/xion-build-diagnostic.json" target="_blank" className="underline">/xion-build-diagnostic.json</a> to confirm what this build received.
-                </div>
-              )}
+        {requiredDisplay.map(({ label, value, desc }) => (
+          <div key={label} className="mb-2">
+            <div className={!value ? 'text-red-600' : 'text-green-700'}>
+              {!value ? '✗' : '✓'} {label}: {maskValue(value)} — {desc}
             </div>
-          );
-        })}
+            {!value && (
+              <div className="text-[10px] text-red-500 ml-4 mt-1">
+                This variable was not present when this bundle was built.
+                If you have already added it in Vercel, you must redeploy with build cache disabled.
+              </div>
+            )}
+          </div>
+        ))}
         
         <hr className="border-yellow-200 my-2" />
         
         <div className="font-bold text-yellow-700 mb-1">
-          Optional config: {OPTIONAL_XION_VARS.length - missingOptional.length} of {OPTIONAL_XION_VARS.length} present
+          Optional config: {optionalStatus.filter(v => v.present).length} of {optionalStatus.length} present
         </div>
-        {OPTIONAL_XION_VARS.map(({ envName, description }) => {
-          const val = process.env[envName];
-          const missing = isMissing(val);
-          return (
-            <div key={envName} className={missing ? 'text-gray-400' : 'text-green-600'}>
-              {missing ? '–' : '✓'} {envName}: {maskValue(val)} — {description}
-            </div>
-          );
-        })}
+        {optionalStatus.map(({ envName, present, description }) => (
+          <div key={envName} className={!present ? 'text-gray-400' : 'text-green-600'}>
+            {present ? '✓' : '–'} {envName}: {description}
+          </div>
+        ))}
         
         <hr className="border-yellow-200 my-2" />
         

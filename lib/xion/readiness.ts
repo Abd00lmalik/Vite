@@ -1,5 +1,7 @@
+// lib/xion/readiness.ts
 import { xionConfig } from './config';
 
+// Metadata about variables for documentation/UI purposes
 export const REQUIRED_XION_VARS = [
   { envName: 'NEXT_PUBLIC_XION_RPC_URL',            description: 'XION RPC endpoint' },
   { envName: 'NEXT_PUBLIC_XION_REST_URL',           description: 'XION REST endpoint' },
@@ -9,11 +11,11 @@ export const REQUIRED_XION_VARS = [
 ] as const;
 
 export const OPTIONAL_XION_VARS = [
-  { envName: 'NEXT_PUBLIC_XION_ISSUER_REGISTRY',   description: 'IssuerRegistry contract (optional — enables issuer verification)' },
-  { envName: 'NEXT_PUBLIC_XION_GRANT_ESCROW',      description: 'GrantEscrow contract (optional — enables donor milestone releases)' },
-  { envName: 'NEXT_PUBLIC_XION_GAS_PRICE',         description: 'Gas price override (optional — defaults to 0.001uxion)' },
-  { envName: 'NEXT_PUBLIC_XION_AUTH_APP_URL',      description: 'Abstraxion auth app URL (optional — has safe default)' },
-  { envName: 'NEXT_PUBLIC_XION_TREASURY_ADDRESS',  description: 'Treasury address (optional — only required for grant-based signing)' },
+  { envName: 'NEXT_PUBLIC_XION_ISSUER_REGISTRY',   description: 'IssuerRegistry contract' },
+  { envName: 'NEXT_PUBLIC_XION_GRANT_ESCROW',      description: 'GrantEscrow contract' },
+  { envName: 'NEXT_PUBLIC_XION_GAS_PRICE',         description: 'Gas price override' },
+  { envName: 'NEXT_PUBLIC_XION_AUTH_APP_URL',      description: 'Abstraxion auth app URL' },
+  { envName: 'NEXT_PUBLIC_XION_TREASURY_ADDRESS',  description: 'Treasury address' },
 ] as const;
 
 export interface ContractValidationFailure {
@@ -33,7 +35,7 @@ export interface ContractValidationResult {
  */
 export function isMissing(value: any): boolean {
   if (value === undefined || value === null) return true;
-  if (typeof value !== 'string') return false; // Handles booleans or other types
+  if (typeof value !== 'string') return false; 
   const trimmed = value.trim();
   if (trimmed === '') return true;
   if (trimmed.startsWith('REQUIRED_INPUT_')) return true;
@@ -41,19 +43,36 @@ export function isMissing(value: any): boolean {
   return false;
 }
 
+/**
+ * Checks config values from the canonical xionConfig object.
+ * xionConfig was built from static process.env literals at build time,
+ * so these values are correct in both server and browser contexts.
+ * This function avoids dynamic process.env[envName] access.
+ */
 export function getXionConfigStatus(): { configReady: boolean; missingVars: string[] } {
-  const missingVars = REQUIRED_XION_VARS
-    .filter(({ envName }) => isMissing(process.env[envName]))
-    .map(({ envName }) => envName);
+  const missingVars: string[] = [];
+
+  if (!xionConfig.rpcUrl)                    missingVars.push('NEXT_PUBLIC_XION_RPC_URL');
+  if (!xionConfig.restUrl)                   missingVars.push('NEXT_PUBLIC_XION_REST_URL');
+  if (!xionConfig.chainId)                   missingVars.push('NEXT_PUBLIC_XION_CHAIN_ID');
+  if (!xionConfig.contracts.vaccinationRecord) missingVars.push('NEXT_PUBLIC_XION_VACCINATION_RECORD');
+  if (!xionConfig.contracts.milestoneChecker)  missingVars.push('NEXT_PUBLIC_XION_MILESTONE_CHECKER');
+
   return { configReady: missingVars.length === 0, missingVars };
 }
 
-export function getOptionalXionVarStatus(): Array<{ envName: string; present: boolean; description: string }> {
-  return OPTIONAL_XION_VARS.map(({ envName, description }) => ({
-    envName,
-    present: !isMissing(process.env[envName]),
-    description,
-  }));
+export function getOptionalXionVarStatus(): Array<{
+  envName: string;
+  present: boolean;
+  description: string;
+}> {
+  return [
+    { envName: 'NEXT_PUBLIC_XION_ISSUER_REGISTRY',   present: !!xionConfig.contracts.issuerRegistry,    description: 'IssuerRegistry contract' },
+    { envName: 'NEXT_PUBLIC_XION_GRANT_ESCROW',      present: !!xionConfig.contracts.grantEscrow,       description: 'GrantEscrow contract' },
+    { envName: 'NEXT_PUBLIC_XION_GAS_PRICE',         present: !!xionConfig.gasPrice !== false,          description: 'Gas price override' },
+    { envName: 'NEXT_PUBLIC_XION_AUTH_APP_URL',      present: !!xionConfig.authAppUrl,                  description: 'Abstraxion auth app URL' },
+    { envName: 'NEXT_PUBLIC_XION_TREASURY_ADDRESS',  present: !!xionConfig.treasuryAddress,             description: 'Treasury address' },
+  ];
 }
 
 /**
