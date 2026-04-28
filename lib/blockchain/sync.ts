@@ -689,11 +689,46 @@ export async function runSync(
         }
 
         const patientPayoutAddress = payoutResolution.address;
+        console.log(
+          `[SyncTrace] Payout address for patient ${patient.healthDropId}: ${patientPayoutAddress} (source: ${payoutResolution.source})`
+        );
+
         const payoutClassification = classifyAddress(patientPayoutAddress, addressContext);
 
         if (!payoutClassification.requiresOnChainAccount) {
           errors.push(
             `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} from ${payoutResolution.source} is classified as ${payoutClassification.role} and treated as identity metadata.`
+          );
+          continue;
+        }
+
+        // ── On-chain preflight for payout address ────────────────────────────
+        // Prevents passing an uninitialized abstract account address to
+        // txCheckAndRelease, which would cause a raw "account does not exist"
+        // error from the XION node. This mirrors the sender preflight at the
+        // top of runSync but targets the patient's payout wallet.
+        try {
+          const payoutPreflight = await runSyncPreflight(patientPayoutAddress, XION.rest);
+          if (!payoutPreflight.accountExists) {
+            console.warn(
+              `[SyncTrace] Payout address ${patientPayoutAddress} does not exist on-chain. Clearing stale wallet from user record.`
+            );
+            // Clear the stale address from the database so it won't poison future syncs
+            const linkedUserId = (await db.patients.get(patient.id))?.userId;
+            if (linkedUserId) {
+              await db.users.update(linkedUserId, {
+                walletAddress: undefined,
+                walletConnectedAt: undefined,
+              });
+            }
+            errors.push(
+              `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} is not initialized on XION Testnet-2 (source: ${payoutResolution.source}). The stale address has been cleared.`
+            );
+            continue;
+          }
+        } catch (preflightError: any) {
+          errors.push(
+            `Milestone processing skipped for ${record.id}: unable to verify payout address ${patientPayoutAddress} on-chain. ${normalizeErrorMessage(preflightError)}`
           );
           continue;
         }

@@ -6,6 +6,7 @@ import {
 } from '@burnt-labs/abstraxion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { XION, explorerAddrUrl } from '@/lib/xion/config';
+import { checkXionAccountPreflight } from '@/lib/xion/preflight';
 import { isSyncConfigured } from '@/lib/xion/readiness';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
@@ -75,14 +76,46 @@ export function useXion() {
         walletAddress: currentAddress,
         connectedAt: new Date().toISOString(),
       };
+      // Always store in localStorage for UI display
       writeScopedWalletState(state);
-      void db.users.update(currentUserId, {
-        walletAddress: currentAddress,
-        walletConnectedAt: state.connectedAt,
-      });
       setBoundWallet(state);
       setWalletError(null);
       connectIntentUserRef.current = null;
+
+      // Only write to Dexie if the address is verified on-chain.
+      // This prevents stale/ephemeral abstract account addresses from
+      // poisoning the sync pipeline via resolvePatientPayoutAddress.
+      void (async () => {
+        try {
+          const preflight = await checkXionAccountPreflight(currentAddress);
+          if (preflight.accountFound) {
+            await db.users.update(currentUserId, {
+              walletAddress: currentAddress,
+              walletConnectedAt: state.connectedAt,
+            });
+            console.log(
+              `[useXion] Wallet ${currentAddress} verified on-chain and saved to user record.`
+            );
+          } else {
+            console.warn(
+              `[useXion] Wallet ${currentAddress} is not initialized on-chain. ` +
+              `Stored in localStorage for UI but NOT written to Dexie to prevent sync poisoning. ` +
+              `Fund this address to complete binding.`
+            );
+          }
+        } catch (error) {
+          // Network error — store optimistically but log the issue
+          console.warn(
+            `[useXion] Could not verify wallet ${currentAddress} on-chain (network error). ` +
+            `Writing to Dexie optimistically.`,
+            error
+          );
+          await db.users.update(currentUserId, {
+            walletAddress: currentAddress,
+            walletConnectedAt: state.connectedAt,
+          });
+        }
+      })();
       return;
     }
 
