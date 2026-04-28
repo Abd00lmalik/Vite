@@ -49,15 +49,28 @@ export function isMissing(value: any): boolean {
  * so these values are correct in both server and browser contexts.
  * This function avoids dynamic process.env[envName] access.
  */
+export function isSyncConfigured(): boolean {
+  return (
+    !!xionConfig.rpcUrl &&
+    !!xionConfig.restUrl &&
+    !!xionConfig.chainId &&
+    !!xionConfig.contracts.vaccinationRecord &&
+    !!xionConfig.contracts.milestoneChecker
+  );
+}
+
+export function getMissingXionVars(): string[] {
+  const missing: string[] = [];
+  if (!xionConfig.rpcUrl)                      missing.push('NEXT_PUBLIC_XION_RPC_URL');
+  if (!xionConfig.restUrl)                     missing.push('NEXT_PUBLIC_XION_REST_URL');
+  if (!xionConfig.chainId)                     missing.push('NEXT_PUBLIC_XION_CHAIN_ID');
+  if (!xionConfig.contracts.vaccinationRecord) missing.push('NEXT_PUBLIC_XION_VACCINATION_RECORD');
+  if (!xionConfig.contracts.milestoneChecker)  missing.push('NEXT_PUBLIC_XION_MILESTONE_CHECKER');
+  return missing;
+}
+
 export function getXionConfigStatus(): { configReady: boolean; missingVars: string[] } {
-  const missingVars: string[] = [];
-
-  if (!xionConfig.rpcUrl)                    missingVars.push('NEXT_PUBLIC_XION_RPC_URL');
-  if (!xionConfig.restUrl)                   missingVars.push('NEXT_PUBLIC_XION_REST_URL');
-  if (!xionConfig.chainId)                   missingVars.push('NEXT_PUBLIC_XION_CHAIN_ID');
-  if (!xionConfig.contracts.vaccinationRecord) missingVars.push('NEXT_PUBLIC_XION_VACCINATION_RECORD');
-  if (!xionConfig.contracts.milestoneChecker)  missingVars.push('NEXT_PUBLIC_XION_MILESTONE_CHECKER');
-
+  const missingVars = getMissingXionVars();
   return { configReady: missingVars.length === 0, missingVars };
 }
 

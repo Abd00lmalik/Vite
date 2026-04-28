@@ -60,11 +60,8 @@ export function explorerAddrUrl(addr: string): string {
 
 // Circular dependency avoidance: logic that depends on readiness.ts 
 // is imported dynamically or provided by readiness.ts directly.
-import { getXionConfigStatus } from './readiness';
+import { getXionConfigStatus, isSyncConfigured } from './readiness';
 
-export function isSyncConfigured(): boolean {
-  return getXionConfigStatus().configReady;
-}
 
 export function isConfigured(): boolean {
   return isSyncConfigured();

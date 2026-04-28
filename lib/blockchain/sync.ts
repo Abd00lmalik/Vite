@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { buildMerkleTree } from '@/lib/utils/merkle';
 import { db } from '@/lib/db/schema';
-import { XION, explorerTxUrl, isSyncConfigured, XION_RUNTIME } from '@/lib/xion/config';
+import { XION, explorerTxUrl, XION_RUNTIME } from '@/lib/xion/config';
 import { txCheckAndRelease, txSubmitBatch } from '@/lib/xion/contracts';
 import {
   ensureSyncQueueEntry,
@@ -22,7 +22,7 @@ import {
   runSyncPreflight,
   requiredSyncGasUxion,
 } from '@/lib/xion/preflight';
-import { formatContractFailure, validateContractsOnChain } from '@/lib/xion/readiness';
+import { formatContractFailure, validateContractsOnChain, isSyncConfigured, getMissingXionVars } from '@/lib/xion/readiness';
 import {
   classifyAddress,
   extractAddressFields,
@@ -233,17 +233,8 @@ async function validateSyncAddresses(
   );
 
   if (!isDemoMode) {
-    const contractChecks = [
-      { name: 'VaccinationRecord', address: contracts.vaccinationRecord },
-      { name: 'MilestoneChecker', address: contracts.milestoneChecker },
-      { name: 'IssuerRegistry', address: contracts.issuerRegistry },
-      { name: 'GrantEscrow', address: contracts.grantEscrow },
-    ];
-
-    for (const { name, address } of contractChecks) {
-      if (!address || !isLikelyXionAddress(address)) {
-        errors.push(`${name} contract address is not configured or invalid.`);
-      }
+    if (!isSyncConfigured()) {
+      errors.push('XION configuration is incomplete.');
     }
   }
 
@@ -478,13 +469,14 @@ export async function runSync(
   }
 
   if (onChain) {
-    if (!XION_RUNTIME.useRealXion || !isSyncConfigured()) {
+    if (!isSyncConfigured()) {
+      const missing = getMissingXionVars();
       return failureResult({
         batchId: 'config-missing',
         recordCount: scopedVaccinations.length,
         merkleRoot: '0x0',
         mode: 'onchain',
-        errors: ['XION configuration is incomplete. Please set all required NEXT_PUBLIC_XION_* variables.'],
+        errors: [`XION configuration is incomplete. Missing: ${missing.join(', ')}`],
       });
     }
 

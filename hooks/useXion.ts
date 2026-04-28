@@ -5,7 +5,8 @@ import {
   useAbstraxionClient,
 } from '@burnt-labs/abstraxion';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { XION, isSyncConfigured, explorerAddrUrl } from '@/lib/xion/config';
+import { XION, explorerAddrUrl } from '@/lib/xion/config';
+import { isSyncConfigured } from '@/lib/xion/readiness';
 import { useAuthStore } from '@/store/authStore';
 import { db } from '@/lib/db/schema';
 import {

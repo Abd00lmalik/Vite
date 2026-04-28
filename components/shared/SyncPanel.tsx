@@ -17,6 +17,8 @@ import {
   formatContractFailure,
   getXionConfigStatus,
   getOptionalXionVarStatus,
+  isSyncConfigured,
+  getMissingXionVars,
   type ContractValidationFailure,
   validateContractsOnChain,
 } from '@/lib/xion/readiness';
@@ -178,6 +180,13 @@ export function SyncPanel() {
     };
   }, [configMissing, requiresOnchainSync, walletReady]);
 
+  // Clear stale configuration error if config becomes valid
+  useEffect(() => {
+    if (!configMissing && result?.batchId === 'config-missing') {
+      setResult(null);
+    }
+  }, [configMissing, result?.batchId]);
+
   useEffect(() => {
     if (!session?.userId) {
       setQuarantineCount(0);
@@ -189,8 +198,9 @@ export function SyncPanel() {
   async function handleSync() {
     if (!session || isSyncing || syncRef.current || !isOnline || pendingCount === 0) return;
     if (configMissing) {
+      const missing = getMissingXionVars();
       toastErrorOnce(
-        'XION sync is not configured. Check your environment variables.',
+        `XION sync is not configured. Missing: ${missing.join(', ')}`,
         (message) => toast.error(message)
       );
       return;
