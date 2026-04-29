@@ -75,6 +75,9 @@ function classifySyncError(
     classifyContext?: AddressClassificationContext;
   } = {}
 ): string {
+  if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true') {
+    console.error(`[SYNC CLASSIFY ERROR] Stage: ${context.stage}, Raw:`, rawError);
+  }
   const message = rawError.toLowerCase();
 
   if (message.includes('timeout')) {
@@ -98,9 +101,9 @@ function classifySyncError(
   }
 
   if (message.includes('account') && message.includes('not found')) {
-    const addressMatch = rawError.match(/account\s+(xion1[0-9a-z\s]+)/i);
+    const addressMatch = rawError.match(/account\s+(xion1[0-9a-z]+)/i);
     if (addressMatch?.[1]) {
-      const parsedAddress = addressMatch[1].replace(/\s+/g, '');
+      const parsedAddress = addressMatch[1];
       const resolvedRole = context.classifyContext != null
           ? classifyAddress(parsedAddress, context.classifyContext).role
           : context.role ?? 'unknown';

@@ -113,8 +113,8 @@ export async function sanitizeSyncQueue(
           contractAddresses: XION.contracts,
           isDemoRecord: record.isDemo,
         });
-        if (classified.role === 'demo') {
-          reason = `demo address in ${match.field}`;
+        if (classified.role === 'demo' || classified.role === 'invalid') {
+          reason = `${classified.role} address reference in ${match.field}`;
           break;
         }
       }
