@@ -4,6 +4,7 @@ export type XionAddressRole =
   | 'patient_identity'
   | 'health_worker'
   | 'demo'
+  | 'invalid'
   | 'unknown';
 
 export interface ClassifiedAddress {
@@ -26,7 +27,10 @@ export interface AddressFieldMatch {
 }
 
 function isXionAddressLike(value: string): boolean {
-  return value.startsWith('xion1');
+  const trimmed = value.trim();
+  // Real XION addresses are exactly 43 characters (xion1 + 38)
+  // We allow longer ones for fuzzy detection but they'll be classified as invalid/unknown
+  return trimmed.startsWith('xion1') && trimmed.length >= 10;
 }
 
 export function classifyAddress(
@@ -41,6 +45,22 @@ export function classifyAddress(
       requiresContractQuery: false,
     };
   }
+
+  const normalized = address.toLowerCase();
+
+  // HEURISTIC: Catch explicit "notfound" sentinels being treated as addresses
+  if (normalized.includes('notfound') || normalized.includes('invalid') || normalized.includes('undefined')) {
+    return {
+      address,
+      role: 'invalid',
+      requiresOnChainAccount: false,
+      requiresContractQuery: false,
+    };
+  }
+
+  // STRICT: Real XION addresses on Testnet-2 are exactly 43 characters.
+  // Anything else starting with xion1 is either a legacy identifier or a malformed ref.
+  const isCorrectLength = address.length === 43;
 
   if (context.connectedWallet && address === context.connectedWallet) {
     return {
@@ -81,6 +101,9 @@ export function classifyAddress(
     };
   }
 
+  // If it's a valid-looking xion1 string but not a known actor or contract,
+  // it is treated as an opaque patient identity reference.
+  // It NEVER requires an on-chain account or contract query.
   return {
     address,
     role: 'patient_identity',
@@ -128,6 +151,8 @@ export function formatAddressError(address: string, role: XionAddressRole, rawEr
       return `Patient identity reference (${address}) is stored as metadata and does not require an on-chain account. Payout or validation skipped.`;
     case 'demo':
       return `A demo address (${address}) was found in your sync queue. It has been excluded automatically.`;
+    case 'invalid':
+      return `An invalid or uninitialized address reference (${address}) was encountered. This typically indicates a missing wallet binding.`;
     case 'unknown':
       return `An unrecognized address (${address}) was encountered during sync and was not submitted. Check your pending records for stale data.`;
     case 'health_worker':

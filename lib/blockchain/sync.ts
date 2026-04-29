@@ -111,6 +111,10 @@ function classifySyncError(
           : 'generated'; 
         return formatSyncContractError(parsedAddress, source);
       }
+      if (resolvedRole === 'invalid' || resolvedRole === 'patient_identity') {
+        // These indicate non-account strings that should never have reached an account-query stage.
+        return formatAddressError(parsedAddress, resolvedRole, rawError);
+      }
       return formatAddressError(parsedAddress, resolvedRole, rawError);
     }
     if (context.contractName) {
@@ -738,6 +742,13 @@ export async function runSync(
         );
 
         const payoutClassification = classifyAddress(patientPayoutAddress, addressContext);
+
+        if (payoutClassification.role === 'invalid') {
+          errors.push(
+            `Record ${record.id}: Payout address ${patientPayoutAddress} is invalid (notfound sentinel). Sync was attempted with a placeholder.`
+          );
+          continue;
+        }
 
         if (!payoutClassification.requiresOnChainAccount) {
           warnings.push(
