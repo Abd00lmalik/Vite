@@ -111,6 +111,16 @@ export async function txSubmitBatch({
   clinicId
 }: TxSubmitBatchArgs): Promise<TxResult> {
   assertKnownContractTarget(XION.contracts.vaccinationRecord, 'vaccinationRecord');
+  
+  console.log("[XION TX STAGE]", {
+    stage: 'txSubmitBatch',
+    senderAddress,
+    contractTarget: XION.contracts.vaccinationRecord,
+    contractRole: 'vaccinationRecord',
+    requiresUserSignature: typeof signingClient?.signAndBroadcast === 'function',
+    signingMode: signingClient?.session ? 'abstraxion_session' : 'direct',
+  });
+
   const res = await signingClient.execute(
     senderAddress,
     XION.contracts.vaccinationRecord,
@@ -167,6 +177,16 @@ export async function txCheckAndRelease({
   batchId
 }: TxCheckAndReleaseArgs): Promise<TxResult> {
   assertKnownContractTarget(XION.contracts.milestoneChecker, 'milestoneChecker');
+
+  console.log("[XION TX STAGE]", {
+    stage: 'txCheckAndRelease',
+    senderAddress,
+    contractTarget: XION.contracts.milestoneChecker,
+    contractRole: 'milestoneChecker',
+    requiresUserSignature: typeof signingClient?.signAndBroadcast === 'function',
+    signingMode: signingClient?.session ? 'abstraxion_session' : 'direct',
+  });
+
   const res = await signingClient.execute(
     senderAddress,
     XION.contracts.milestoneChecker,

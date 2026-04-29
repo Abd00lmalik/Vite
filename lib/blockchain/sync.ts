@@ -92,20 +92,20 @@ function classifySyncError(
   }
 
   if (message.includes('account') && message.includes('not found')) {
-    const addressMatch = rawError.match(/account\s+(xion1[0-9a-z]+)/i);
+    const addressMatch = rawError.match(/account\s+(xion1[0-9a-z\s]+)/i);
     if (addressMatch?.[1]) {
-      const resolvedRole =
-        context.role ??
-        (context.classifyContext != null
-          ? classifyAddress(addressMatch[1], context.classifyContext).role
-          : 'unknown');
+      const parsedAddress = addressMatch[1].replace(/\s+/g, '');
+      const resolvedRole = context.classifyContext != null
+          ? classifyAddress(parsedAddress, context.classifyContext).role
+          : context.role ?? 'unknown';
+
       if (resolvedRole === 'contract') {
-        const source = (context.address === addressMatch[1] && context.role === 'contract')
+        const source = (parsedAddress === context.address && context.role === 'contract')
           ? 'env_config'
-          : 'generated'; // We'll map this better with the new trace
-        return formatSyncContractError(addressMatch[1], source);
+          : 'generated'; 
+        return formatSyncContractError(parsedAddress, source);
       }
-      return formatAddressError(addressMatch[1], resolvedRole, rawError);
+      return formatAddressError(parsedAddress, resolvedRole, rawError);
     }
     if (context.contractName) {
       return `${context.contractName} contract was not found on-chain. Verify the contract address in your environment configuration.`;
@@ -631,7 +631,6 @@ export async function runSync(
           stage: 'submit',
           contractName: 'VaccinationRecord',
           address: XION.contracts.vaccinationRecord,
-          role: 'contract',
           classifyContext: addressContext,
         })
       );
@@ -775,7 +774,6 @@ export async function runSync(
               stage: 'milestone',
               contractName: 'MilestoneChecker',
               address: patientPayoutAddress,
-              role: payoutClassification.role,
               classifyContext: addressContext,
             })} Source: ${payoutResolution.source}.`
           );
