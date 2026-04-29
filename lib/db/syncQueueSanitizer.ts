@@ -18,6 +18,11 @@ const CONTRACT_ADDRESS_FIELDS = [
   'milestoneContract',
   'submittedTo',
   'contract',
+  'vaccinationRecordContract',
+  'milestoneCheckerContract',
+  'issuerContract',
+  'grantEscrowAddress',
+  'contractTarget',
 ] as const;
 
 // Identity fields where an xion1 address is expected and safe.

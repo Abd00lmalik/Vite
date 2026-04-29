@@ -19,8 +19,8 @@ import {
   getOptionalXionVarStatus,
   isSyncConfigured,
   getMissingXionVars,
-  type ContractValidationFailure,
-  validateContractsOnChain,
+  type ContractPreflightResult,
+  validateRequiredContracts,
 } from '@/lib/xion/readiness';
 import { toastErrorOnce } from '@/lib/utils/toastOnce';
 import {
@@ -55,7 +55,7 @@ export function SyncPanel() {
   const [readiness, setReadiness] = useState<SyncPreflightResult | null>(null);
   const [isCheckingReadiness, setIsCheckingReadiness] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
-  const [contractFailures, setContractFailures] = useState<ContractValidationFailure[]>([]);
+  const [contractFailures, setContractFailures] = useState<ContractPreflightResult['failures']>([]);
   const [isCheckingContracts, setIsCheckingContracts] = useState(false);
   const [quarantineCount, setQuarantineCount] = useState(0);
   const isOnline = useOfflineStatus();
@@ -157,13 +157,7 @@ export function SyncPanel() {
 
     async function checkContracts() {
       try {
-        const validation = await validateContractsOnChain(
-          {
-            vaccinationRecord: XION.contracts.vaccinationRecord,
-            milestoneChecker: XION.contracts.milestoneChecker,
-          },
-          XION.rest
-        );
+        const validation = await validateRequiredContracts(XION.rest);
         if (cancelled) return;
         setContractFailures(validation.failures);
       } finally {

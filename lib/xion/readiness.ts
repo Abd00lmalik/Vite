@@ -88,79 +88,64 @@ export function getOptionalXionVarStatus(): Array<{
   ];
 }
 
-/**
- * Validates provided contract addresses on-chain.
- */
-export async function validateContractsOnChain(
-  contracts: {
-    vaccinationRecord: string;
-    milestoneChecker: string;
-  },
-  restUrl: string
-): Promise<ContractValidationResult> {
-  const required = [
+export interface ContractPreflightResult {
+  valid: boolean;
+  failures: Array<{
+    role: 'VaccinationRecord' | 'MilestoneChecker';
+    envVar: string;
+    address: string;
+    reason: 'empty' | 'not_found' | 'not_a_contract';
+  }>;
+}
+
+export async function validateRequiredContracts(restUrl: string): Promise<ContractPreflightResult> {
+  // STRICT: only these two addresses from xionConfig are validated as contracts.
+  // No other address source is permitted.
+  const targets = [
     {
+      role: 'VaccinationRecord' as const,
       envVar: 'NEXT_PUBLIC_XION_VACCINATION_RECORD',
-      address: contracts.vaccinationRecord?.trim() ?? '',
+      address: xionConfig.contracts.vaccinationRecord,
     },
     {
+      role: 'MilestoneChecker' as const,
       envVar: 'NEXT_PUBLIC_XION_MILESTONE_CHECKER',
-      address: contracts.milestoneChecker?.trim() ?? '',
+      address: xionConfig.contracts.milestoneChecker,
     },
   ];
 
-  const failures: ContractValidationFailure[] = [];
+  const failures: ContractPreflightResult['failures'] = [];
 
-  for (const { envVar, address } of required) {
-    if (!address) {
-      failures.push({ envVar, address: '', reason: 'empty' });
+  for (const { role, envVar, address } of targets) {
+    if (!address || address.trim() === '') {
+      failures.push({ role, envVar, address: '', reason: 'empty' });
       continue;
     }
-
-    if (!address.startsWith('xion1') || address.length < 40) {
-      failures.push({ envVar, address, reason: 'invalid_format' });
-      continue;
-    }
-
     try {
-      const response = await fetch(`${restUrl}/cosmwasm/wasm/v1/contract/${address}`, {
-        method: 'GET',
-        cache: 'no-store',
-      });
-      
-      if (response.status === 404) {
-        failures.push({ envVar, address, reason: 'not_found' });
+      const res = await fetch(`${restUrl}/cosmwasm/wasm/v1/contract/${address}`);
+      if (res.status === 404) {
+        failures.push({ role, envVar, address, reason: 'not_found' });
         continue;
       }
-
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.contract_info?.code_id) {
-        failures.push({ envVar, address, reason: 'not_a_contract' });
+      const data = await res.json();
+      if (!data?.contract_info?.code_id) {
+        failures.push({ role, envVar, address, reason: 'not_a_contract' });
       }
     } catch {
-      failures.push({ envVar, address, reason: 'not_found' });
+      failures.push({ role, envVar, address, reason: 'not_found' });
     }
   }
 
-  return {
-    valid: failures.length === 0,
-    failures,
-  };
+  return { valid: failures.length === 0, failures };
 }
 
-export function formatContractFailure(failure: ContractValidationFailure): string {
-  const redeployNote = 'If you recently updated this variable in Vercel, you must redeploy with cleared cache.';
-
-  switch (failure.reason) {
+export function formatContractFailure(f: ContractPreflightResult['failures'][number]): string {
+  switch (f.reason) {
     case 'empty':
-      return `${failure.envVar} is not set. Add it in Vercel and redeploy.`;
-    case 'invalid_format':
-      return `${failure.envVar} ("${failure.address}") is not a valid xion1... address. ${redeployNote}`;
+      return `${f.role} contract address is not set. Check ${f.envVar} in your Vercel environment.`;
     case 'not_found':
-      return `${failure.envVar} ("${failure.address}") was not found on XION Testnet-2. ${redeployNote}`;
+      return `${f.role} contract (${f.envVar} = ${f.address}) was not found on XION Testnet-2. This contract may not be deployed.`;
     case 'not_a_contract':
-      return `${failure.envVar} ("${failure.address}") is not a valid contract. ${redeployNote}`;
-    default:
-      return `${failure.envVar} is invalid.`;
+      return `${f.role}: address ${f.address} exists on-chain but is not a CosmWasm contract.`;
   }
 }

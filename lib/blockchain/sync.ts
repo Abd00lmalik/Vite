@@ -22,7 +22,7 @@ import {
   runSyncPreflight,
   requiredSyncGasUxion,
 } from '@/lib/xion/preflight';
-import { formatContractFailure, validateContractsOnChain, isSyncConfigured, getMissingXionVars } from '@/lib/xion/readiness';
+import { formatContractFailure, validateRequiredContracts, isSyncConfigured, getMissingXionVars } from '@/lib/xion/readiness';
 import {
   classifyAddress,
   extractAddressFields,
@@ -30,6 +30,7 @@ import {
   type AddressClassificationContext,
   type XionAddressRole,
 } from '@/lib/xion/addressTypes';
+import { traceXionAddressesInSync } from '@/lib/xion/traceAddresses';
 import type { Patient, SyncResult, VaccinationRecord } from '@/types';
 
 export interface SyncProgressUpdate {
@@ -98,6 +99,12 @@ function classifySyncError(
         (context.classifyContext != null
           ? classifyAddress(addressMatch[1], context.classifyContext).role
           : 'unknown');
+      if (resolvedRole === 'contract') {
+        const source = (context.address === addressMatch[1] && context.role === 'contract')
+          ? 'env_config'
+          : 'generated'; // We'll map this better with the new trace
+        return formatSyncContractError(addressMatch[1], source);
+      }
       return formatAddressError(addressMatch[1], resolvedRole, rawError);
     }
     if (context.contractName) {
@@ -129,6 +136,21 @@ function classifySyncError(
   }
 
   return `Sync failed: ${rawError}`;
+}
+
+function formatSyncContractError(address: string, source: 'env_config' | 'queue_record' | 'generated' | 'argument_error' | 'unknown'): string {
+  switch (source) {
+    case 'env_config':
+      return `The configured contract address (${address}) was not found on XION Testnet-2. Verify the contract is deployed and the Vercel environment variable is correct.`;
+    case 'queue_record':
+      return `A pending sync record contained a stale contract-like address (${address}). This record has been quarantined. Re-record the vaccination to create a clean entry.`;
+    case 'generated':
+      return `An internally generated address (${address}) was incorrectly treated as a contract target. This is a code bug — report it.`;
+    case 'argument_error':
+      return `A sync call passed the wrong address (${address}) as the contract target. This is a code bug — the patient or wallet address was used where the contract address should be.`;
+    case 'unknown':
+      return `Sync encountered an unexpected address (${address}). Enable sync diagnostics and check the browser console for address provenance.`;
+  }
 }
 
 function mapSyncError(
@@ -385,6 +407,13 @@ export async function runSync(
     getPendingPatients({ ownerUserId: session.userId }),
   ]);
 
+  traceXionAddressesInSync({
+    config: XION.contracts,
+    connectedWallet: senderAddress,
+    pendingRecords: pendingQueue,
+    label: 'runSync',
+  });
+
   const queuedVaccinationIds = new Set(
     pendingQueue
       .filter((item) => item.type === 'vaccination')
@@ -531,13 +560,7 @@ export async function runSync(
       });
     }
 
-    const contractValidation = await validateContractsOnChain(
-      {
-        vaccinationRecord: XION.contracts.vaccinationRecord,
-        milestoneChecker: XION.contracts.milestoneChecker,
-      },
-      XION.rest
-    );
+    const contractValidation = await validateRequiredContracts(XION.rest);
 
     if (!contractValidation.valid) {
       return failureResult({
