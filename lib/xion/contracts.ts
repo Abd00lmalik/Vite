@@ -1,4 +1,27 @@
-import { XION, explorerTxUrl } from './config';
+import { XION, xionConfig, explorerTxUrl } from './config';
+
+function assertKnownContractTarget(address: string, role: string) {
+  const knownContracts = {
+    vaccinationRecord: xionConfig.contracts.vaccinationRecord,
+    milestoneChecker: xionConfig.contracts.milestoneChecker,
+    issuerRegistry: xionConfig.contracts.issuerRegistry,
+    grantEscrow: xionConfig.contracts.grantEscrow,
+  };
+
+  const expected = knownContracts[role as keyof typeof knownContracts];
+
+  if (!expected) {
+    throw new Error(`[XION CONTRACT BUG] Unknown contract role: ${role}`);
+  }
+
+  if (address !== expected) {
+    throw new Error(
+      `[XION CONTRACT BUG] ${role} contract target mismatch. ` +
+      `Expected ${expected}, received ${address}. ` +
+      `This means a non-contract address was passed into a contract call.`
+    );
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -14,6 +37,7 @@ export async function queryIsCredentialed(
   queryClient: any,
   address: string
 ): Promise<boolean> {
+  assertKnownContractTarget(XION.contracts.issuerRegistry, 'issuerRegistry');
   const res = await queryClient.queryContractSmart(
     XION.contracts.issuerRegistry,
     { is_credentialed: { address } }
@@ -28,6 +52,7 @@ export async function txCredentialWorker(
   clinicId: string,
   clinicName: string
 ): Promise<TxResult> {
+  assertKnownContractTarget(XION.contracts.issuerRegistry, 'issuerRegistry');
   const res = await signingClient.execute(
     senderAddress,
     XION.contracts.issuerRegistry,
@@ -52,6 +77,7 @@ export async function txRevokeWorker(
   senderAddress: string,
   workerAddr: string
 ): Promise<TxResult> {
+  assertKnownContractTarget(XION.contracts.issuerRegistry, 'issuerRegistry');
   const res = await signingClient.execute(
     senderAddress,
     XION.contracts.issuerRegistry,
@@ -67,14 +93,24 @@ export async function txRevokeWorker(
 
 // ── VaccinationRecord ─────────────────────────────────────────────────────
 
-export async function txSubmitBatch(
-  signingClient: any,
-  senderAddress: string,
-  batchId: string,
-  merkleRoot: string,
-  recordCount: number,
-  clinicId: string
-): Promise<TxResult> {
+export interface TxSubmitBatchArgs {
+  signingClient: any;
+  senderAddress: string;
+  batchId: string;
+  merkleRoot: string;
+  recordCount: number;
+  clinicId: string;
+}
+
+export async function txSubmitBatch({
+  signingClient,
+  senderAddress,
+  batchId,
+  merkleRoot,
+  recordCount,
+  clinicId
+}: TxSubmitBatchArgs): Promise<TxResult> {
+  assertKnownContractTarget(XION.contracts.vaccinationRecord, 'vaccinationRecord');
   const res = await signingClient.execute(
     senderAddress,
     XION.contracts.vaccinationRecord,
@@ -100,6 +136,7 @@ export async function queryBatch(
   queryClient: any,
   batchId: string
 ): Promise<any> {
+  assertKnownContractTarget(XION.contracts.vaccinationRecord, 'vaccinationRecord');
   return queryClient.queryContractSmart(
     XION.contracts.vaccinationRecord,
     { get_batch: { batch_id: batchId } }
@@ -108,16 +145,28 @@ export async function queryBatch(
 
 // ── MilestoneChecker ──────────────────────────────────────────────────────
 
-export async function txCheckAndRelease(
-  signingClient: any,
-  senderAddress: string,
-  patientAddr: string,
-  patientId: string,
-  vaccineName: string,
-  doseNumber: number,
-  programId: string,
-  batchId: string
-): Promise<TxResult> {
+export interface TxCheckAndReleaseArgs {
+  signingClient: any;
+  senderAddress: string;
+  patientAddr: string;
+  patientId: string;
+  vaccineName: string;
+  doseNumber: number;
+  programId: string;
+  batchId: string;
+}
+
+export async function txCheckAndRelease({
+  signingClient,
+  senderAddress,
+  patientAddr,
+  patientId,
+  vaccineName,
+  doseNumber,
+  programId,
+  batchId
+}: TxCheckAndReleaseArgs): Promise<TxResult> {
+  assertKnownContractTarget(XION.contracts.milestoneChecker, 'milestoneChecker');
   const res = await signingClient.execute(
     senderAddress,
     XION.contracts.milestoneChecker,
@@ -148,6 +197,7 @@ export async function txFundProgram(
   programId: string,
   amountUxion: string       // e.g. "1000000" for 1 XION
 ): Promise<TxResult> {
+  assertKnownContractTarget(XION.contracts.grantEscrow, 'grantEscrow');
   const res = await signingClient.execute(
     senderAddress,
     XION.contracts.grantEscrow,
@@ -167,6 +217,7 @@ export async function queryProgramBalance(
   queryClient: any,
   programId: string
 ): Promise<string> {
+  assertKnownContractTarget(XION.contracts.grantEscrow, 'grantEscrow');
   const res = await queryClient.queryContractSmart(
     XION.contracts.grantEscrow,
     { program_balance: { program_id: programId } }
@@ -178,6 +229,7 @@ export async function queryGrantHistory(
   queryClient: any,
   programId: string
 ): Promise<any[]> {
+  assertKnownContractTarget(XION.contracts.grantEscrow, 'grantEscrow');
   const res = await queryClient.queryContractSmart(
     XION.contracts.grantEscrow,
     { grant_history: { program_id: programId, limit: 50 } }

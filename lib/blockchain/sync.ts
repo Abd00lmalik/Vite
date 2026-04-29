@@ -613,14 +613,14 @@ export async function runSync(
       console.log('[SyncTrace] Address used:', XION.contracts.vaccinationRecord);
       console.log('[SyncTrace] JS Source: XION.contracts.vaccinationRecord (lib/xion/config.ts)');
 
-      const tx = await txSubmitBatch(
+      const tx = await txSubmitBatch({
         signingClient,
         senderAddress,
         batchId,
-        root,
-        validVaccinations.length,
+        merkleRoot: root,
+        recordCount: validVaccinations.length,
         clinicId
-      );
+      });
       txHash = tx.txHash;
       explorerUrl = tx.explorerUrl;
       blockHeight = tx.height;
@@ -757,16 +757,16 @@ export async function runSync(
         }
 
         try {
-          const grantTx = await txCheckAndRelease(
+          const grantTx = await txCheckAndRelease({
             signingClient,
             senderAddress,
-            patientPayoutAddress,
-            patient.healthDropId,
-            record.vaccineName,
-            record.doseNumber,
-            patient.programId,
+            patientAddr: patientPayoutAddress,
+            patientId: patient.healthDropId,
+            vaccineName: record.vaccineName,
+            doseNumber: record.doseNumber,
+            programId: patient.programId,
             batchId
-          );
+          });
           grantTxHash = grantTx.txHash;
         } catch (error: any) {
           errors.push(
