@@ -364,6 +364,23 @@ function failureResult({
   };
 }
 
+/**
+ * Force normalize patient_id to prevent XION addresses from leaking into contract payload.
+ * ANYTHING that looks like a XION address MUST NOT pass.
+ */
+function forceNormalizePatientId(id: string): string {
+  if (!id) return `patient_${uuidv4()}`;
+
+  const lower = id.toLowerCase();
+
+  // ANYTHING that looks like a XION address MUST NOT pass
+  if (lower.startsWith("xion1")) {
+    return `patient_ref_${btoa(id).slice(0, 16)}`;
+  }
+
+  return id;
+}
+
 export async function runSync(
   session: { userId: string; role: string; clinicId?: string; demo?: boolean },
   signingClient: any,
@@ -620,7 +637,14 @@ export async function runSync(
   }
 
   onProgress?.({ step: 3, message: 'Building cryptographic proof...' });
-  const { root } = buildMerkleTree(validVaccinations);
+
+  // 2. Apply it to EVERY record before Merkle build
+  const finalizedVaccinations = validVaccinations.map((r) => ({
+    ...r,
+    patientId: forceNormalizePatientId(r.patientId),
+  }));
+
+  const { root } = buildMerkleTree(finalizedVaccinations);
   console.log('[SyncTrace] Merkle tree built. Root:', root);
   const batchId = uuidv4();
 
@@ -637,13 +661,27 @@ export async function runSync(
       console.log('[SyncTrace] Address used:', XION.contracts.vaccinationRecord);
       console.log('[SyncTrace] JS Source: XION.contracts.vaccinationRecord (lib/xion/config.ts)');
 
+      // 3. Add HARD ASSERTION (fail fast)
+      for (const r of finalizedVaccinations) {
+        if (r.patientId.startsWith("xion1")) {
+          throw new Error(
+            `[FATAL] patient_id leaked into payload: ${r.patientId}`
+          );
+        }
+      }
+
+      // 4. Add debug log (must show sanitized output)
+      console.log("[FINAL PAYLOAD CHECK]", finalizedVaccinations.map(r => ({
+        patient_id: r.patientId,
+      })));
+
       console.log('[SyncTrace] Attempting txSubmitBatch...');
       const tx = await txSubmitBatch({
         signingClient,
         senderAddress,
         batchId,
         merkleRoot: root,
-        recordCount: validVaccinations.length,
+        recordCount: finalizedVaccinations.length,
         clinicId
       });
       console.log('[SyncTrace] txSubmitBatch returned result:', tx);
@@ -662,7 +700,7 @@ export async function runSync(
       );
       return failureResult({
         batchId,
-        recordCount: validVaccinations.length,
+        recordCount: finalizedVaccinations.length,
         merkleRoot: root,
         txHash,
         blockHeight,
@@ -681,7 +719,7 @@ export async function runSync(
   await markSyncQueueSynced(
     session.userId,
     'vaccination',
-    validVaccinations.map((record) => record.id)
+    finalizedVaccinations.map((record) => record.id)
   );
 
   for (const patient of pendingPatients) {
@@ -696,14 +734,14 @@ export async function runSync(
 
   await db.syncBatches.put({
     id: batchId,
-    records: validVaccinations,
+    records: finalizedVaccinations,
     merkleRoot: root,
     proof: [],
     status: onChain ? 'confirmed' : 'submitted',
     submittedAt: new Date().toISOString(),
     xionTxHash: txHash,
     blockHeight,
-    recordCount: validVaccinations.length,
+    recordCount: finalizedVaccinations.length,
   });
 
   onProgress?.({ step: 5, message: 'Verifying milestones and releasing grants...' });
@@ -796,7 +834,7 @@ export async function runSync(
             signingClient,
             senderAddress,
             patientAddr: patientPayoutAddress,
-            patientId: patient.healthDropId,
+            patientId: forceNormalizePatientId(patient.healthDropId),
             vaccineName: record.vaccineName,
             doseNumber: record.doseNumber,
             programId: patient.programId,
