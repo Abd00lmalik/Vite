@@ -266,9 +266,13 @@ export function SyncPanel() {
 
       if (response.success) {
         const txSuffix = response.txHash ? ` Tx: ${shortTxHash(response.txHash)}` : '';
-        toast.success(`${response.recordCount} records synced.${txSuffix}`);
+        if (response.phaseB?.skipped) {
+          toast.success(`${response.recordCount} records synced.${txSuffix} (Payouts skipped)`);
+        } else {
+          toast.success(`${response.recordCount} records synced.${txSuffix}`);
+        }
       } else {
-        const firstError = response.errors[0] ?? 'Sync failed.';
+        const firstError = response.errors?.[0] ?? 'Sync failed.';
         const toastId = toastErrorOnce(firstError, (message) => toast.error(message));
         if (isAccountNotInitializedMessage(firstError)) {
           accountInitToastIdRef.current = toastId;
@@ -516,7 +520,7 @@ export function SyncPanel() {
                           : 'text-gray-400'
                       }
                     >
-                      {STEP_LABELS[stepKey]}
+                      {stepKey === 5 && result?.phaseB?.skipped && done ? 'Skipped (no payout account)' : STEP_LABELS[stepKey]}
                     </span>
                   </div>
                 );
@@ -541,22 +545,31 @@ export function SyncPanel() {
             {result.success ? (
               <>
                 <p className="font-semibold text-who-green">
-                  {result.recordCount} records synced {result.mode === 'onchain' ? 'on-chain' : '(demo mode)'}
+                  Sync complete
                 </p>
-                <p className="text-ui-text-muted">
-                  Root: {result.merkleRoot.slice(0, 12)}...{result.merkleRoot.slice(-8)}
+                <p className="text-ui-text-muted mt-1">
+                  Vaccination records stored {result.mode === 'onchain' ? 'on-chain' : '(demo mode)'}
                 </p>
-                {result.txHash ? (
-                  <p className="font-mono text-ui-text-muted">
-                    Tx: {shortTxHash(result.txHash)}{result.blockHeight ? ` @ ${result.blockHeight}` : ''}
+                {result.phaseB?.skipped && (
+                  <p className="text-who-orange mt-1">
+                    Payout skipped (no valid patient payout account)
                   </p>
-                ) : null}
+                )}
+                <div className="mt-2 text-ui-text-muted">
+                  <p>Root: {result.merkleRoot.slice(0, 12)}...{result.merkleRoot.slice(-8)}</p>
+                  {result.txHash ? (
+                    <p className="font-mono">
+                      Tx: {shortTxHash(result.txHash)}{result.blockHeight ? ` @ ${result.blockHeight}` : ''}
+                    </p>
+                  ) : null}
+                </div>
                 {result.grantsReleased > 0 ? (
-                  <p className="font-medium text-who-blue">${result.grantsReleased} in grants released</p>
+                  <p className="font-medium text-who-blue mt-1">${result.grantsReleased} in grants released</p>
                 ) : null}
                 {result.flaggedCount > 0 ? (
-                  <p className="text-who-orange">{result.flaggedCount} records flagged for review</p>
+                  <p className="text-who-orange mt-1">{result.flaggedCount} records flagged for review</p>
                 ) : null}
+                <div className="mt-2">
                 {result.mode === 'onchain' && result.explorerUrl ? (
                   <a
                     href={result.explorerUrl}
@@ -573,6 +586,7 @@ export function SyncPanel() {
                     Demo mode sync completed locally.
                   </p>
                 )}
+                </div>
               </>
             ) : (
               <>

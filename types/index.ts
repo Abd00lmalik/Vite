@@ -230,8 +230,7 @@ export interface SyncResult {
   explorerUrl?: string;
   merkleRoot: string;
   grantsReleased: number;
-  errors: string[];
-  flaggedCount?: number;
+  errors: string[];  warnings?: string[];  phaseA?: { success: boolean };  phaseB?: { success: boolean; skipped: boolean; warnings: string[]; };  flaggedCount?: number;
   mode?: 'simulated' | 'onchain';
 }
 
@@ -250,6 +249,7 @@ export interface ProgramReport {
   }>;
   generatedAt: string;
 }
+
 
 
 

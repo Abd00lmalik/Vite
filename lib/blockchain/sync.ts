@@ -322,6 +322,7 @@ function failureResult({
   flaggedCount,
   mode,
   errors,
+  warnings,
   blockHeight,
 }: {
   batchId: string;
@@ -332,6 +333,7 @@ function failureResult({
   flaggedCount?: number;
   mode: 'onchain' | 'simulated';
   errors: string[];
+  warnings?: string[];
   blockHeight?: number;
 }): SyncResult {
   return {
@@ -343,6 +345,7 @@ function failureResult({
     merkleRoot,
     grantsReleased: grantsReleased ?? 0,
     errors,
+    warnings: warnings ?? [],
     flaggedCount,
     mode,
   };
@@ -355,6 +358,7 @@ export async function runSync(
   onProgress?: (update: SyncProgressUpdate) => void
 ): Promise<SyncResult> {
   const errors: string[] = [];
+  const warnings: string[] = [];
   let grantsReleased = 0;
   let flaggedCount = 0;
 
@@ -492,6 +496,9 @@ export async function runSync(
       merkleRoot: '0x0',
       grantsReleased: 0,
       errors,
+      warnings,
+      phaseA: { success: true },
+      phaseB: { success: true, skipped: false, warnings: [] },
       flaggedCount: 0,
       mode: onChain ? 'onchain' : 'simulated',
     };
@@ -591,6 +598,9 @@ export async function runSync(
       merkleRoot: '0x0',
       grantsReleased: 0,
       errors,
+      warnings,
+      phaseA: { success: false },
+      phaseB: { success: true, skipped: true, warnings: [] },
       flaggedCount,
       mode: onChain ? 'onchain' : 'simulated',
     };
@@ -641,6 +651,7 @@ export async function runSync(
         txHash,
         blockHeight,
         errors,
+        warnings,
         flaggedCount,
         mode: 'onchain',
       });
@@ -704,7 +715,7 @@ export async function runSync(
       if (onChain) {
         const payoutResolution = await resolvePatientPayoutAddress(patient);
         if (!payoutResolution.address) {
-          errors.push(
+          warnings.push(
             `Milestone processing skipped for ${record.id}: patient ${patient.healthDropId} has no eligible payout wallet. Source: ${payoutResolution.source}.`
           );
           continue;
@@ -718,7 +729,7 @@ export async function runSync(
         const payoutClassification = classifyAddress(patientPayoutAddress, addressContext);
 
         if (!payoutClassification.requiresOnChainAccount) {
-          errors.push(
+          warnings.push(
             `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} from ${payoutResolution.source} is classified as ${payoutClassification.role} and treated as identity metadata.`
           );
           continue;
@@ -743,13 +754,13 @@ export async function runSync(
                 walletConnectedAt: undefined,
               });
             }
-            errors.push(
+            warnings.push(
               `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} is not initialized on XION Testnet-2 (source: ${payoutResolution.source}). The stale address has been cleared.`
             );
             continue;
           }
         } catch (preflightError: any) {
-          errors.push(
+          warnings.push(
             `Milestone processing skipped for ${record.id}: unable to verify payout address ${patientPayoutAddress} on-chain. ${normalizeErrorMessage(preflightError)}`
           );
           continue;
@@ -768,7 +779,7 @@ export async function runSync(
           });
           grantTxHash = grantTx.txHash;
         } catch (error: any) {
-          errors.push(
+          warnings.push(
             `Milestone processing skipped for ${record.id}: ${mapSyncError(error, {
               senderAddress,
               stage: 'milestone',
@@ -838,6 +849,8 @@ export async function runSync(
     timestamp: new Date().toISOString(),
   });
 
+  console.log("[SYNC SUCCESS] Vaccination batch committed on-chain");
+
   return {
     success: true,
     batchId,
@@ -848,6 +861,13 @@ export async function runSync(
     merkleRoot: root,
     grantsReleased,
     errors,
+    warnings,
+    phaseA: { success: true },
+    phaseB: { 
+      success: warnings.length === 0,
+      skipped: warnings.length > 0,
+      warnings
+    },
     flaggedCount,
     mode: onChain ? 'onchain' : 'simulated',
   };
