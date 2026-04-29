@@ -125,7 +125,7 @@ export function formatAddressError(address: string, role: XionAddressRole, rawEr
     case 'contract':
       return `A contract address (${address}) could not be found on-chain. Verify your XION contract environment variables.`;
     case 'patient_identity':
-      return `A patient identity reference (${address}) was incorrectly queried as an on-chain account. This is a configuration issue - report it.`;
+      return `Patient identity reference (${address}) is stored as metadata and does not require an on-chain account. Payout or validation skipped.`;
     case 'demo':
       return `A demo address (${address}) was found in your sync queue. It has been excluded automatically.`;
     case 'unknown':

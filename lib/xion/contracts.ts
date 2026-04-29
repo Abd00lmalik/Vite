@@ -112,13 +112,15 @@ export async function txSubmitBatch({
 }: TxSubmitBatchArgs): Promise<TxResult> {
   assertKnownContractTarget(XION.contracts.vaccinationRecord, 'vaccinationRecord');
   
+  const isSession = Boolean(signingClient?.session);
   console.log("[XION TX STAGE]", {
     stage: 'txSubmitBatch',
     senderAddress,
     contractTarget: XION.contracts.vaccinationRecord,
     contractRole: 'vaccinationRecord',
-    requiresUserSignature: typeof signingClient?.signAndBroadcast === 'function',
-    signingMode: signingClient?.session ? 'abstraxion_session' : 'direct',
+    requiresUserSignature: true,
+    signingMode: isSession ? 'abstraxion_session' : 'direct',
+    manualPromptExpected: !isSession,
   });
 
   const res = await signingClient.execute(
@@ -178,13 +180,15 @@ export async function txCheckAndRelease({
 }: TxCheckAndReleaseArgs): Promise<TxResult> {
   assertKnownContractTarget(XION.contracts.milestoneChecker, 'milestoneChecker');
 
+  const isSession = Boolean(signingClient?.session);
   console.log("[XION TX STAGE]", {
     stage: 'txCheckAndRelease',
     senderAddress,
     contractTarget: XION.contracts.milestoneChecker,
     contractRole: 'milestoneChecker',
-    requiresUserSignature: typeof signingClient?.signAndBroadcast === 'function',
-    signingMode: signingClient?.session ? 'abstraxion_session' : 'direct',
+    requiresUserSignature: true,
+    signingMode: isSession ? 'abstraxion_session' : 'direct',
+    manualPromptExpected: !isSession,
   });
 
   const res = await signingClient.execute(
