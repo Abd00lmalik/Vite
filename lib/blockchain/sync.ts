@@ -77,11 +77,17 @@ function classifySyncError(
 ): string {
   const message = rawError.toLowerCase();
 
+  if (message.includes('timeout')) {
+    if (message.includes('signing session')) {
+      return 'Signing session timed out. Please reconnect your wallet.';
+    }
+    return 'XION transaction execution timed out (60s). The transaction may still be processing on-chain.';
+  }
+
   if (
     message.includes('failed to fetch') ||
     message.includes('networkerror') ||
     message.includes('network request failed') ||
-    message.includes('timeout') ||
     message.includes('econn')
   ) {
     return 'Could not reach XION network. Check your connection.';
@@ -608,6 +614,7 @@ export async function runSync(
 
   onProgress?.({ step: 3, message: 'Building cryptographic proof...' });
   const { root } = buildMerkleTree(validVaccinations);
+  console.log('[SyncTrace] Merkle tree built. Root:', root);
   const batchId = uuidv4();
 
   onProgress?.({ step: 4, message: onChain ? 'Broadcasting to XION...' : 'Running demo sync...' });
@@ -623,6 +630,7 @@ export async function runSync(
       console.log('[SyncTrace] Address used:', XION.contracts.vaccinationRecord);
       console.log('[SyncTrace] JS Source: XION.contracts.vaccinationRecord (lib/xion/config.ts)');
 
+      console.log('[SyncTrace] Attempting txSubmitBatch...');
       const tx = await txSubmitBatch({
         signingClient,
         senderAddress,
@@ -631,6 +639,7 @@ export async function runSync(
         recordCount: validVaccinations.length,
         clinicId
       });
+      console.log('[SyncTrace] txSubmitBatch returned result:', tx);
       txHash = tx.txHash;
       explorerUrl = tx.explorerUrl;
       blockHeight = tx.height;
@@ -658,6 +667,7 @@ export async function runSync(
     }
   }
 
+  console.log('[SyncTrace] Marking records as synced in local DB...');
   for (const record of validVaccinations) {
     await markVaccinationSynced(record.id, txHash, blockHeight);
   }
@@ -675,6 +685,7 @@ export async function runSync(
     'patient',
     pendingPatients.map((patient) => patient.id)
   );
+  console.log('[SyncTrace] Local records updated.');
 
   await db.syncBatches.put({
     id: batchId,
@@ -840,6 +851,8 @@ export async function runSync(
     }
   }
 
+  console.log('[SyncTrace] Milestone processing completed. Released:', grantsReleased);
+
   await db.auditLogs.put({
     id: uuidv4(),
     entityId: batchId,
@@ -849,7 +862,11 @@ export async function runSync(
     timestamp: new Date().toISOString(),
   });
 
-  console.log("[SYNC SUCCESS] Vaccination batch committed on-chain");
+  console.log("[SYNC SUCCESS] Vaccination batch committed on-chain. Result:", {
+    batchId,
+    txHash,
+    recordCount: validVaccinations.length,
+  });
 
   return {
     success: true,

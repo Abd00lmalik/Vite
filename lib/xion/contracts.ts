@@ -123,10 +123,11 @@ export async function txSubmitBatch({
     manualPromptExpected: !isSession,
   });
 
-  const res = await signingClient.execute(
+  console.log("[XION EXECUTE START]", {
+    role: "vaccinationRecord",
     senderAddress,
-    XION.contracts.vaccinationRecord,
-    {
+    contractAddress: XION.contracts.vaccinationRecord,
+    msg: {
       submit_batch: {
         batch_id:     batchId,
         merkle_root:  merkleRoot,
@@ -135,13 +136,53 @@ export async function txSubmitBatch({
         clinic_id:    clinicId,
       },
     },
-    'auto'
-  );
-  return {
-    txHash:      res.transactionHash,
-    height:      res.height,
-    explorerUrl: explorerTxUrl(res.transactionHash),
-  };
+  });
+
+  try {
+    // Add a 60s timeout to prevent UI hanging indefinitely
+    const executePromise = signingClient.execute(
+      senderAddress,
+      XION.contracts.vaccinationRecord,
+      {
+        submit_batch: {
+          batch_id:     batchId,
+          merkle_root:  merkleRoot,
+          record_count: recordCount,
+          submitter:    senderAddress,
+          clinic_id:    clinicId,
+        },
+      },
+      'auto'
+    );
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("XION transaction execution timed out (60s).")), 60000)
+    );
+
+    const res = await Promise.race([executePromise, timeoutPromise]) as any;
+
+    console.log("[XION EXECUTE RESULT]", {
+      role: "vaccinationRecord",
+      result: res,
+      transactionHash: res?.transactionHash,
+      height: res?.height,
+      gasUsed: res?.gasUsed,
+    });
+
+    return {
+      txHash:      res.transactionHash,
+      height:      res.height,
+      explorerUrl: explorerTxUrl(res.transactionHash),
+    };
+  } catch (error: any) {
+    console.error("[XION EXECUTE ERROR]", {
+      role: "vaccinationRecord",
+      error,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    throw error;
+  }
 }
 
 export async function queryBatch(
@@ -191,10 +232,11 @@ export async function txCheckAndRelease({
     manualPromptExpected: !isSession,
   });
 
-  const res = await signingClient.execute(
+  console.log("[XION EXECUTE START]", {
+    role: "milestoneChecker",
     senderAddress,
-    XION.contracts.milestoneChecker,
-    {
+    contractAddress: XION.contracts.milestoneChecker,
+    msg: {
       check_and_release: {
         patient_addr: patientAddr,
         patient_id:   patientId,
@@ -204,13 +246,53 @@ export async function txCheckAndRelease({
         batch_id:     batchId,
       },
     },
-    'auto'
-  );
-  return {
-    txHash:      res.transactionHash,
-    height:      res.height,
-    explorerUrl: explorerTxUrl(res.transactionHash),
-  };
+  });
+
+  try {
+    const executePromise = signingClient.execute(
+      senderAddress,
+      XION.contracts.milestoneChecker,
+      {
+        check_and_release: {
+          patient_addr: patientAddr,
+          patient_id:   patientId,
+          vaccine_name: vaccineName,
+          dose_number:  doseNumber,
+          program_id:   programId,
+          batch_id:     batchId,
+        },
+      },
+      'auto'
+    );
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("XION milestone transaction timed out (60s).")), 60000)
+    );
+
+    const res = await Promise.race([executePromise, timeoutPromise]) as any;
+
+    console.log("[XION EXECUTE RESULT]", {
+      role: "milestoneChecker",
+      result: res,
+      transactionHash: res?.transactionHash,
+      height: res?.height,
+      gasUsed: res?.gasUsed,
+    });
+
+    return {
+      txHash:      res.transactionHash,
+      height:      res.height,
+      explorerUrl: explorerTxUrl(res.transactionHash),
+    };
+  } catch (error: any) {
+    console.error("[XION EXECUTE ERROR]", {
+      role: "milestoneChecker",
+      error,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    throw error;
+  }
 }
 
 // ── GrantEscrow ───────────────────────────────────────────────────────────
