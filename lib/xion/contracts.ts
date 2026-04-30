@@ -1,4 +1,6 @@
 import { XION, xionConfig, explorerTxUrl } from './config';
+import { MsgExecuteContract } from 'cosmjs-types/cosmwasm/wasm/v1/tx';
+import { toUtf8 } from '@cosmjs/encoding';
 
 function assertKnownContractTarget(address: string, role: string) {
   const knownContracts = {
@@ -242,18 +244,24 @@ export async function txSubmitBatch({
 
   try {
 
-    // Create raw CosmWasm execute message because direct signing clients
-    // (PopupSigningClient, RedirectSigningClient) do NOT implement `.execute()`,
-    // they only implement `.signAndBroadcast()`.
+    // Create raw CosmWasm execute message using the official pattern
+    // expected by Abstraxion direct signing clients.
     const msgExecuteContract = {
       typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
-      value: {
+      value: MsgExecuteContract.fromPartial({
         sender: senderAddress,
         contract: XION.contracts.vaccinationRecord,
-        msg: new TextEncoder().encode(JSON.stringify(msg)),
+        msg: toUtf8(JSON.stringify(msg)),
         funds: [],
-      },
+      }),
     };
+
+    console.log("[XION MSG ENCODING CHECK]", {
+      typeUrl: msgExecuteContract.typeUrl,
+      valueType: typeof msgExecuteContract.value,
+      msgIsUint8Array: msgExecuteContract.value?.msg instanceof Uint8Array,
+      msgJsonPreview: msg,
+    });
 
     const executePromise = signingClient.signAndBroadcast(
       senderAddress,
@@ -433,18 +441,24 @@ export async function txCheckAndRelease({
 
   try {
 
-    // Create raw CosmWasm execute message because direct signing clients
-    // (PopupSigningClient, RedirectSigningClient) do NOT implement `.execute()`,
-    // they only implement `.signAndBroadcast()`.
+    // Create raw CosmWasm execute message using the official pattern
+    // expected by Abstraxion direct signing clients.
     const msgExecuteContract = {
       typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
-      value: {
+      value: MsgExecuteContract.fromPartial({
         sender: senderAddress,
         contract: XION.contracts.milestoneChecker,
-        msg: new TextEncoder().encode(JSON.stringify(msg)),
+        msg: toUtf8(JSON.stringify(msg)),
         funds: [],
-      },
+      }),
     };
+
+    console.log("[XION MSG ENCODING CHECK]", {
+      typeUrl: msgExecuteContract.typeUrl,
+      valueType: typeof msgExecuteContract.value,
+      msgIsUint8Array: msgExecuteContract.value?.msg instanceof Uint8Array,
+      msgJsonPreview: msg,
+    });
 
     const executePromise = signingClient.signAndBroadcast(
       senderAddress,
