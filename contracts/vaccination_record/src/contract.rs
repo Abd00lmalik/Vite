@@ -46,13 +46,6 @@ pub fn execute(
             submitter,
             clinic_id,
         } => {
-            // Query IssuerRegistry to verify credential
-            let registry = ISSUER_REGISTRY.load(deps.storage)?;
-            let query_msg = cosmwasm_std::to_json_binary(&serde_json::json!({
-                "is_credentialed": { "address": submitter }
-            }))?;
-            // Simplified: in production use typed query
-            // For CosmWasm 2.x, we trust the submitter field; real gate is at the registry level
             // Check batch_id uniqueness
             if BATCHES.may_load(deps.storage, &batch_id)?.is_some() {
                 return Err(ContractError::Unauthorized {});

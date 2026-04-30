@@ -12,17 +12,29 @@ const AbstraxionProvider = dynamic(
   { ssr: false }
 );
 
+// Build the contracts grant list so the Abstraxion session key is authorized
+// to execute against our deployed contracts. Without this, every execute()
+// call fails with "account not found" because the grantee has no permissions.
+const abstraxionContracts: string[] = [
+  XION.contracts.vaccinationRecord,
+  XION.contracts.milestoneChecker,
+  XION.contracts.issuerRegistry,
+  XION.contracts.grantEscrow,
+].filter(Boolean);
+
 const abstraxionConfig = {
   chainId:  XION.chainId,
   ...(XION.treasury ? { treasury: XION.treasury } : {}),
   rpcUrl:   XION.rpc,
   restUrl:  XION.rest,
   gasPrice: XION.gasPrice,
+  // Grant the session key permission to call our contracts.
+  // This is REQUIRED — without it the session key has zero contract permissions
+  // and every signingClient.execute() call will fail.
+  contracts: abstraxionContracts,
   authentication: {
-    // We use 'auto' which leverages Abstraxion's direct signing flow.
-    // If 'requireAuth' is true, users sign transactions directly from their meta-account.
-    // The "No grants configured" warning in the console is EXPECTED and intentional 
-    // because we are not using the treasury session key / grant-based signing flow here.
+    // 'auto' resolves to 'popup' on desktop, 'redirect' on mobile/PWA.
+    // This is the recommended default per the Abstraxion SDK docs.
     type: 'auto' as const,
     authAppUrl: XION.authApp,
   },

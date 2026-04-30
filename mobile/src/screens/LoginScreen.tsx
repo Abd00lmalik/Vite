@@ -25,10 +25,10 @@ export function LoginScreen({ navigation }: any) {
       // is handled through the web dashboard via Abstraxion SDK.
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
       
-      // Use a deterministic placeholder address for the mobile demo
+      // Use a deterministic placeholder ID for the mobile demo
       // The actual XION account connection happens on the web dashboard
-      const placeholderAddr = 'xion1healthworker00000000000000000000';
-      await AsyncStorage.setItem('xion_address', placeholderAddr);
+      const placeholderId = 'worker_dev_placeholder_001';
+      await AsyncStorage.setItem('xion_address', placeholderId);
       navigation.replace('Dashboard');
     } catch (e) {
       Alert.alert('Connection Error', 'Could not initialize the local health database. Please try again.');

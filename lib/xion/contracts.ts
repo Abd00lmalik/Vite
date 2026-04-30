@@ -102,6 +102,31 @@ export interface TxSubmitBatchArgs {
   clinicId: string;
 }
 
+function findXionLikeValues(obj: unknown, path = ""): Array<{ path: string; value: string }> {
+  const found: Array<{ path: string; value: string }> = [];
+
+  if (typeof obj === "string" && obj.startsWith("xion1")) {
+    found.push({ path, value: obj });
+  } else if (Array.isArray(obj)) {
+    obj.forEach((v, i) => found.push(...findXionLikeValues(v, `${path}[${i}]`)));
+  } else if (obj && typeof obj === "object") {
+    Object.entries(obj as Record<string, unknown>).forEach(([k, v]) => {
+      found.push(...findXionLikeValues(v, path ? `${path}.${k}` : k));
+    });
+  }
+
+  return found;
+}
+
+const allowedAddressPaths = [
+  "submit_batch.submitter",
+  "check_and_release.patient_addr",
+  "fund_program.sender",
+  "worker_addr",
+  "sender",
+  "submitter"
+];
+
 export async function txSubmitBatch({
   signingClient,
   senderAddress,
@@ -138,20 +163,63 @@ export async function txSubmitBatch({
     },
   });
 
+  const msg = {
+    submit_batch: {
+      batch_id:     batchId,
+      merkle_root:  merkleRoot,
+      record_count: recordCount,
+      submitter:    senderAddress,
+      clinic_id:    clinicId,
+    },
+  };
+
+  console.log("[FINAL EXECUTE MSG FULL]", JSON.stringify({
+    senderAddress,
+    contractAddress: XION.contracts.vaccinationRecord,
+    msg,
+  }, null, 2));
+
+  // Step 5: Log recursive scan
+  console.log("[FINAL XION VALUE SCAN]", findXionLikeValues(msg).map(v => {
+    // Basic classification for the scan log
+    const lower = v.value.toLowerCase();
+    let role = "unknown";
+    if (lower === senderAddress.toLowerCase()) role = "sender/submitter";
+    else if (lower === XION.contracts.vaccinationRecord.toLowerCase()) role = "contract";
+    
+    return {
+      ...v,
+      role,
+      allowed: allowedAddressPaths.some(p => v.path.endsWith(p)),
+    };
+  }));
+
+  // Step 1: Verify actual signer
+  console.log("[FINAL SIGNER CHECK]", {
+    uiWalletAddress: senderAddress, // Assuming senderAddress passed from UI
+    senderAddressPassedToExecute: senderAddress,
+    signingClientType: signingClient?.constructor?.name ?? typeof signingClient,
+    hasSession: Boolean(signingClient?.session),
+    signerAddress: signingClient?.signer?.address, // Internal signer if exposed
+  });
+
+  // Step 6: Hard guard
+  const suspicious = findXionLikeValues(msg);
+  for (const { path, value } of suspicious) {
+    if (!allowedAddressPaths.some(p => path.endsWith(p))) {
+      console.warn(`[XION GUARD] Blocking unauthorized xion1 address at "${path}": ${value}`);
+      throw new Error(`[FATAL] Unauthorized XION address in payload at ${path}`);
+    }
+  }
+
+
   try {
+
     // Add a 60s timeout to prevent UI hanging indefinitely
     const executePromise = signingClient.execute(
       senderAddress,
       XION.contracts.vaccinationRecord,
-      {
-        submit_batch: {
-          batch_id:     batchId,
-          merkle_root:  merkleRoot,
-          record_count: recordCount,
-          submitter:    senderAddress,
-          clinic_id:    clinicId,
-        },
-      },
+      msg,
       'auto'
     );
 
@@ -248,20 +316,62 @@ export async function txCheckAndRelease({
     },
   });
 
+  const msg = {
+    check_and_release: {
+      patient_addr: patientAddr,
+      patient_id:   patientId,
+      vaccine_name: vaccineName,
+      dose_number:  doseNumber,
+      program_id:   programId,
+      batch_id:     batchId,
+    },
+  };
+
+  console.log("[FINAL EXECUTE MSG FULL]", JSON.stringify({
+    senderAddress,
+    contractAddress: XION.contracts.milestoneChecker,
+    msg,
+  }, null, 2));
+
+  // Step 5: Log recursive scan
+  console.log("[FINAL XION VALUE SCAN]", findXionLikeValues(msg).map(v => {
+    const lower = v.value.toLowerCase();
+    let role = "unknown";
+    if (lower === senderAddress.toLowerCase()) role = "sender";
+    else if (lower === XION.contracts.milestoneChecker.toLowerCase()) role = "contract";
+    else if (lower === patientAddr.toLowerCase()) role = "patient_addr";
+    
+    return {
+      ...v,
+      role,
+      allowed: allowedAddressPaths.some(p => v.path.endsWith(p)),
+    };
+  }));
+
+  // Step 1: Verify actual signer
+  console.log("[FINAL SIGNER CHECK]", {
+    uiWalletAddress: senderAddress,
+    senderAddressPassedToExecute: senderAddress,
+    signingClientType: signingClient?.constructor?.name ?? typeof signingClient,
+    hasSession: Boolean(signingClient?.session),
+    signerAddress: signingClient?.signer?.address,
+  });
+
+  // Step 6: Hard guard
+  const suspicious = findXionLikeValues(msg);
+  for (const { path, value } of suspicious) {
+    if (!allowedAddressPaths.some(p => path.endsWith(p))) {
+      console.warn(`[XION GUARD] Blocking unauthorized xion1 address at "${path}": ${value}`);
+      throw new Error(`[FATAL] Unauthorized XION address in payload at ${path}`);
+    }
+  }
+
   try {
+
     const executePromise = signingClient.execute(
       senderAddress,
       XION.contracts.milestoneChecker,
-      {
-        check_and_release: {
-          patient_addr: patientAddr,
-          patient_id:   patientId,
-          vaccine_name: vaccineName,
-          dose_number:  doseNumber,
-          program_id:   programId,
-          batch_id:     batchId,
-        },
-      },
+      msg,
       'auto'
     );
 

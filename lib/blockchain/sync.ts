@@ -96,14 +96,43 @@ function classifySyncError(
     return 'Could not reach XION network. Check your connection.';
   }
 
-  if (context.stage === 'preflight' && message.includes('account') && message.includes('not found')) {
-    return formatAccountNotInitializedMessage(context.address);
-  }
-
   if (message.includes('account') && message.includes('not found')) {
     const addressMatch = rawError.match(/account\s+(xion1[0-9a-z]+)/i);
-    if (addressMatch?.[1]) {
-      const parsedAddress = addressMatch[1];
+    const parsedAddress = addressMatch?.[1];
+
+    // CRITICAL: Always log the raw error so we can debug which account is actually missing
+    console.error('[SYNC ERROR CLASSIFY] "account not found" detected', {
+      stage: context.stage,
+      parsedAddress,
+      senderAddress: context.address,
+      rawError,
+    });
+
+    // If we're in the submit or milestone stage, this is almost certainly a
+    // signer/session account issue — NOT a patient identity issue.
+    // The Abstraxion grantee session key may not have grants or may not be
+    // initialized on-chain, which produces this exact error.
+    if (context.stage === 'submit' || context.stage === 'milestone') {
+      if (parsedAddress) {
+        // Check if the missing account is the sender we passed to execute()
+        if (parsedAddress === context.address) {
+          return `Sender account ${parsedAddress} was not found on-chain. Your wallet may not be initialized. Fund it with UXION before syncing. (Raw: ${rawError})`;
+        }
+        // It's some other account — likely the Abstraxion session/grantee key
+        // Do NOT classify this as patient_identity. It's a signing infrastructure failure.
+        return `Transaction failed: account ${parsedAddress} not found on-chain. This may indicate that the Abstraxion session key lacks contract grants, or the signing account is not initialized. Reconnect your wallet and try again. (Raw: ${rawError})`;
+      }
+      // No address extracted — show raw error
+      return `Transaction failed: an account was not found on-chain. ${rawError}`;
+    }
+
+    // For preflight stage
+    if (context.stage === 'preflight') {
+      return formatAccountNotInitializedMessage(context.address);
+    }
+
+    // For other stages, use the classifier but ALWAYS append raw error
+    if (parsedAddress) {
       const resolvedRole = context.classifyContext != null
           ? classifyAddress(parsedAddress, context.classifyContext).role
           : context.role ?? 'unknown';
@@ -114,11 +143,8 @@ function classifySyncError(
           : 'generated'; 
         return formatSyncContractError(parsedAddress, source);
       }
-      if (resolvedRole === 'invalid' || resolvedRole === 'patient_identity') {
-        // These indicate non-account strings that should never have reached an account-query stage.
-        return formatAddressError(parsedAddress, resolvedRole, rawError);
-      }
-      return formatAddressError(parsedAddress, resolvedRole, rawError);
+      // For any other role, show the address and raw error without misleading classification
+      return formatAddressError(parsedAddress, resolvedRole, rawError) + ` (Raw: ${rawError})`;
     }
     if (context.contractName) {
       return `${context.contractName} contract was not found on-chain. Verify the contract address in your environment configuration.`;
@@ -126,7 +152,7 @@ function classifySyncError(
     if (context.address) {
       return `Account ${context.address} does not exist on XION Testnet-2. This address may be stale or uninitialized.`;
     }
-    return 'An account required for sync was not found on-chain. Check your contract configuration.';
+    return `An account required for sync was not found on-chain. ${rawError}`;
   }
 
   if (message.includes('unauthorized')) {
@@ -175,9 +201,21 @@ function mapSyncError(
     address?: string;
     role?: XionAddressRole;
     classifyContext?: AddressClassificationContext;
+    msg?: any; // Added to capture message
   } = {}
 ): string {
   const raw = normalizeErrorMessage(error);
+  
+  // Step 6: Log raw error details
+  console.error("[RAW XION EXECUTE ERROR]", {
+    stage: context.stage,
+    senderAddress: context.senderAddress,
+    contractAddress: context.address,
+    msg: context.msg,
+    rawError: error,
+    rawErrorMessage: raw,
+  });
+
   return classifySyncError(raw, {
     contractName: context.contractName,
     address: context.address ?? context.senderAddress,
@@ -743,6 +781,34 @@ export async function runSync(
     blockHeight,
     recordCount: finalizedVaccinations.length,
   });
+
+  // Step 7: Enable/Disable milestone release via env
+  const enableMilestoneRelease = process.env.NEXT_PUBLIC_ENABLE_MILESTONE_RELEASE === 'true';
+
+  console.log("[PHASE B CONFIG]", {
+    enabled: enableMilestoneRelease,
+    envValue: process.env.NEXT_PUBLIC_ENABLE_MILESTONE_RELEASE,
+  });
+
+  if (!enableMilestoneRelease) {
+    console.log('[Sync] Milestone and grant release processing is DISABLED (Phase A only).');
+    onProgress?.({ step: 5, message: 'Sync complete (Vaccinations only).' });
+    return {
+      success: true,
+      batchId,
+      recordCount: finalizedVaccinations.length,
+      txHash,
+      blockHeight,
+      merkleRoot: root,
+      grantsReleased: 0,
+      errors,
+      warnings,
+      phaseA: { success: true },
+      phaseB: { success: true, skipped: true, warnings: ['Milestone processing disabled by configuration'] },
+      flaggedCount,
+      mode: onChain ? 'onchain' : 'simulated',
+    };
+  }
 
   onProgress?.({ step: 5, message: 'Verifying milestones and releasing grants...' });
 
