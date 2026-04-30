@@ -6,6 +6,8 @@ import { AlertTriangle, ExternalLink, Link2 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import toast from 'react-hot-toast';
 import { countPendingSyncItemsForUser } from '@/lib/db/db';
+import { XION, SHOW_XION_DEBUG, xionConfig } from '@/lib/xion/config';
+import { getXionSubmitter } from '@/lib/xion/signer-adapter';
 import { runSync, type SyncProgressUpdate } from '@/lib/blockchain/sync';
 import { useXion } from '@/hooks/useXion';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
@@ -29,10 +31,7 @@ import {
   runSyncPreflight,
   type SyncPreflightResult,
 } from '@/lib/xion/preflight';
-import { XION, xionConfig } from '@/lib/xion/config';
 import { clearSyncQueueQuarantine, getSyncQueueQuarantine } from '@/lib/db/syncQueueSanitizer';
-
-const SHOW_XION_DEBUG = process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true';
 
 const STEP_LABELS: Record<SyncProgressUpdate['step'], string> = {
   1: 'Gathering pending records',
@@ -65,6 +64,10 @@ export function SyncPanel() {
   const configStatus = getXionConfigStatus();
   const optionalVars = getOptionalXionVarStatus();
   const missingOptionalVars = optionalVars.filter(v => !v.present).map(v => v.envName);
+  
+  const adapter = getXionSubmitter(signingClient);
+  const isServerFallbackEnabled = process.env.NEXT_PUBLIC_XION_ENABLE_SERVER_SUBMIT === 'true';
+
   const demoSession = isDemoAccount({ userId: session?.userId, demo: session?.demo });
   const requiresOnchainSync = !demoSession;
   const configMissing = requiresOnchainSync && !configStatus.configReady;
@@ -377,6 +380,42 @@ export function SyncPanel() {
           Sync can still run.
         </p>
       ) : null}
+
+      {SHOW_XION_DEBUG && signingClient && (
+        <div className="mt-2 rounded border border-ui-border bg-ui-surface p-2 text-[10px] leading-tight text-ui-text-muted">
+          <div className="font-semibold uppercase tracking-wider opacity-60">Signing Diagnostics</div>
+          <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+            <span>Signing mode:</span>
+            <span className="font-mono text-ui-text">
+              {adapter.mode === 'browser_direct' ? 'Direct Wallet' : 
+               adapter.mode === 'browser_session' ? 'Abstraxion Session' : 
+               adapter.mode === 'server_testnet' ? 'Server Testnet' : 'Unsupported'}
+            </span>
+            
+            <span>Compatibility:</span>
+            <span className={`font-medium ${adapter.mode !== 'unsupported' ? 'text-who-green' : 'text-who-orange'}`}>
+              {adapter.mode !== 'unsupported' ? 'YES (Compatible)' : 'NO (Incompatible)'}
+            </span>
+
+            <span>Signer Type:</span>
+            <span className="font-mono text-ui-text truncate">
+              {signingClient?.constructor?.name || typeof signingClient}
+            </span>
+
+            {isServerFallbackEnabled && (
+              <>
+                <span>Server Fallback:</span>
+                <span className="text-who-green">ENABLED</span>
+              </>
+            )}
+          </div>
+          {adapter.mode === 'unsupported' && (
+            <p className="mt-2 font-medium text-who-orange">
+              Error: {adapter.reason}. Try reconnecting your XION wallet.
+            </p>
+          )}
+        </div>
+      )}
 
       {walletMissing ? (
         <p className="mt-2 rounded border border-who-orange/20 bg-who-orange-light p-2 text-xs text-who-orange">

@@ -30,7 +30,10 @@ export const xionConfig = {
     issuerRegistry:    normalizePublicEnv(process.env.NEXT_PUBLIC_XION_ISSUER_REGISTRY),
     grantEscrow:       normalizePublicEnv(process.env.NEXT_PUBLIC_XION_GRANT_ESCROW),
   },
+  showDebug: normalizePublicEnv(process.env.NEXT_PUBLIC_SHOW_XION_DEBUG) === 'true',
 } as const;
+
+export const SHOW_XION_DEBUG = xionConfig.showDebug;
 
 export type XionConfig = typeof xionConfig;
 

@@ -1,6 +1,7 @@
 import { XION, xionConfig, explorerTxUrl } from './config';
 import { MsgExecuteContract } from 'cosmjs-types/cosmwasm/wasm/v1/tx';
 import { toUtf8 } from '@cosmjs/encoding';
+import { getXionSubmitter } from './signer-adapter';
 
 function assertKnownContractTarget(address: string, role: string) {
   const knownContracts = {
@@ -196,114 +197,38 @@ export async function txSubmitBatch({
     };
   }));
 
-  // Step 1: Verify actual signer and resolve signing mode
-  const signingClientType = signingClient?.constructor?.name ?? typeof signingClient;
-  const hasSession = Boolean(signingClient?.session);
-  // 'io' is the minified constructor name for PopupSigningClient in some production builds
-  const isDirectClient = signingClientType === 'io' || signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
+  // Step 1: Resolve the proper signing adapter
+  const adapter = getXionSubmitter(signingClient);
   
-  type XionSigningMode = "direct_user_paid" | "abstraxion_session_feegrant" | "unsupported";
-  let resolvedMode: XionSigningMode = "unsupported";
-
-  if (isDirectClient) {
-    resolvedMode = "direct_user_paid";
-  } else if (hasSession || signingClientType === 'GranteeSignerClient') {
-    resolvedMode = "abstraxion_session_feegrant";
-  }
-
-  // Refined classification as requested
-  const finalModeLabel = resolvedMode === "unsupported" ? "unsupported" : (resolvedMode === "direct_user_paid" ? "direct_popup_signAndBroadcast" : "abstraxion_session_feegrant");
-
   console.log("[XION SIGNING MODE RESOLVED]", {
-    mode: finalModeLabel,
-    hasSession,
-    signerAddress: signingClient?.signer?.address,
-    senderAddressPassedToExecute: senderAddress,
-    signingClientType,
-    treasuryConfigured: Boolean(XION.treasury),
-    gasPrice: XION.gasPrice,
+    adapterMode: adapter.mode,
+    signingClientType: signingClient?.constructor?.name ?? typeof signingClient,
+    signerAddress: (signingClient as any)?.signer?.address,
   });
 
-  if (resolvedMode === "unsupported") {
-    throw new Error(`Unsupported XION signing client (type: ${signingClientType}). Cannot submit transaction.`);
+  if (adapter.mode === "unsupported") {
+    throw new Error(`XION Sync failed: ${adapter.reason}`);
   }
 
-  if (resolvedMode === "abstraxion_session_feegrant" && !XION.treasury && !hasSession) {
-    console.warn("WARNING: Using session feegrant mode but no treasury is configured and no session is active. Transaction may fail with fee-grant not found.");
-  }
-
-  console.log("[FINAL SIGNER CHECK]", {
-    uiWalletAddress: senderAddress,
-    senderAddressPassedToExecute: senderAddress,
-    signingClientType,
-    hasSession,
-    signerAddress: signingClient?.signer?.address,
-  });
-
-  // Step 6: Hard guard
+  // Step 6: Hard guard for sensitive addresses
   const suspicious = findXionLikeValues(msg);
   for (const { path, value } of suspicious) {
     if (!allowedAddressPaths.some(p => path.endsWith(p))) {
-      console.warn(`[XION GUARD] Blocking unauthorized xion1 address at "${path}": ${value}`);
       throw new Error(`[FATAL] Unauthorized XION address in payload at ${path}`);
     }
   }
 
-
   try {
-
-    console.log("[SIGNING CLIENT SHAPE]", {
-      constructorName: signingClient?.constructor?.name,
-      keys: Object.keys(signingClient || {}),
-      hasExecute: typeof (signingClient as any)?.execute,
-      hasSignAndBroadcast: typeof (signingClient as any)?.signAndBroadcast,
-      hasSign: typeof (signingClient as any)?.sign,
-      hasBroadcastTx: typeof (signingClient as any)?.broadcastTx,
-    });
-
-    const executeMsg = msg; // Using the provided msg exactly
-
-    // CRITICAL FIX: The Abstraxion dashboard expects the messages array to be serialized using JSON.stringify.
-    // 1. Uint8Array becomes {"0":123,...} -> BinaryWriter.bytes() sees no .length or invalid type -> writes 0 bytes.
-    // 2. string (base64) -> BinaryWriter.bytes() creates a Uint8Array of same length but ALL ZEROES because string[i] is NaN.
-    // 3. Array.from(uint8array) -> becomes [123, ...] -> JSON.stringify preserves it -> BinaryWriter.bytes() handles number[] perfectly.
-    const msgExecuteContract = {
-      typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
-      value: {
-        sender: senderAddress,
-        contract: XION.contracts.vaccinationRecord,
-        msg: Array.from(toUtf8(JSON.stringify(executeMsg))) as unknown as Uint8Array,
-        funds: [],
-      },
-    };
-
-    console.log("[XION MSG ENCODING CHECK]", {
-      typeUrl: msgExecuteContract.typeUrl,
-      valueType: typeof msgExecuteContract.value,
-      msgIsUint8Array: msgExecuteContract.value?.msg instanceof Uint8Array,
-      msgIsArray: Array.isArray(msgExecuteContract.value?.msg),
-      msgJsonPreview: executeMsg,
-    });
-
-
-    const executePromise = signingClient.signAndBroadcast(
+    const res = await adapter.execute({
+      signingClient,
       senderAddress,
-      [msgExecuteContract],
-      'auto'
-    );
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("XION transaction execution timed out (60s).")), 60000)
-    );
-
-    const res = await Promise.race([executePromise, timeoutPromise]) as any;
+      contractAddress: XION.contracts.vaccinationRecord,
+      msg,
+    });
 
     console.log("[XION EXECUTE RESULT]", {
       role: "vaccinationRecord",
       result: res,
-      transactionHash: res?.transactionHash,
-      height: res?.height,
-      gasUsed: res?.gasUsed,
     });
 
     return {
@@ -312,12 +237,7 @@ export async function txSubmitBatch({
       explorerUrl: explorerTxUrl(res.transactionHash),
     };
   } catch (error: any) {
-    console.error("[XION EXECUTE ERROR]", {
-      role: "vaccinationRecord",
-      error,
-      message: error?.message,
-      stack: error?.stack,
-    });
+    console.error("[XION EXECUTE ERROR]", error);
     throw error;
   }
 }
@@ -372,17 +292,6 @@ export async function txCheckAndRelease({
   console.log("[XION EXECUTE START]", {
     role: "milestoneChecker",
     senderAddress,
-    contractAddress: XION.contracts.milestoneChecker,
-    msg: {
-      check_and_release: {
-        patient_addr: patientAddr,
-        patient_id:   patientId,
-        vaccine_name: vaccineName,
-        dose_number:  doseNumber,
-        program_id:   programId,
-        batch_id:     batchId,
-      },
-    },
   });
 
   const msg = {
@@ -396,125 +305,23 @@ export async function txCheckAndRelease({
     },
   };
 
-  console.log("[FINAL EXECUTE MSG FULL]", JSON.stringify({
-    senderAddress,
-    contractAddress: XION.contracts.milestoneChecker,
-    msg,
-  }, null, 2));
+  const adapter = getXionSubmitter(signingClient);
 
-  // Step 5: Log recursive scan
-  console.log("[FINAL XION VALUE SCAN]", findXionLikeValues(msg).map(v => {
-    const lower = v.value.toLowerCase();
-    let role = "unknown";
-    if (lower === senderAddress.toLowerCase()) role = "sender";
-    else if (lower === XION.contracts.milestoneChecker.toLowerCase()) role = "contract";
-    else if (lower === patientAddr.toLowerCase()) role = "patient_addr";
-    
-    return {
-      ...v,
-      role,
-      allowed: allowedAddressPaths.some(p => v.path.endsWith(p)),
-    };
-  }));
-
-  // Step 1: Verify actual signer and resolve signing mode
-  const signingClientType = signingClient?.constructor?.name ?? typeof signingClient;
-  const hasSession = Boolean(signingClient?.session);
-  // 'io' is the minified constructor name for PopupSigningClient in some production builds
-  const isDirectClient = signingClientType === 'io' || signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
-  
-  type XionSigningMode = "direct_user_paid" | "abstraxion_session_feegrant" | "unsupported";
-  let resolvedMode: XionSigningMode = "unsupported";
-
-  if (isDirectClient) {
-    resolvedMode = "direct_user_paid";
-  } else if (hasSession || signingClientType === 'GranteeSignerClient') {
-    resolvedMode = "abstraxion_session_feegrant";
-  }
-
-  // Refined classification as requested
-  const finalModeLabel = resolvedMode === "unsupported" ? "unsupported" : (resolvedMode === "direct_user_paid" ? "direct_popup_signAndBroadcast" : "abstraxion_session_feegrant");
-
-  console.log("[XION SIGNING MODE RESOLVED]", {
-    mode: resolvedMode,
-    hasSession,
-    signerAddress: signingClient?.signer?.address,
-    senderAddressPassedToExecute: senderAddress,
-    signingClientType,
-    treasuryConfigured: Boolean(XION.treasury),
-    gasPrice: XION.gasPrice,
-  });
-
-  if (resolvedMode === "abstraxion_session_feegrant" && !XION.treasury && !hasSession) {
-    console.warn("WARNING: Using session feegrant mode but no treasury is configured and no session is active. Transaction may fail with fee-grant not found.");
-  }
-
-  console.log("[FINAL SIGNER CHECK]", {
-    uiWalletAddress: senderAddress,
-    senderAddressPassedToExecute: senderAddress,
-    signingClientType,
-    hasSession,
-    signerAddress: signingClient?.signer?.address,
-  });
-
-  // Step 6: Hard guard
-  const suspicious = findXionLikeValues(msg);
-  for (const { path, value } of suspicious) {
-    if (!allowedAddressPaths.some(p => path.endsWith(p))) {
-      console.warn(`[XION GUARD] Blocking unauthorized xion1 address at "${path}": ${value}`);
-      throw new Error(`[FATAL] Unauthorized XION address in payload at ${path}`);
-    }
+  if (adapter.mode === "unsupported") {
+    throw new Error(`XION Sync failed: ${adapter.reason}`);
   }
 
   try {
-
-    console.log("[SIGNING CLIENT SHAPE]", {
-      constructorName: signingClient?.constructor?.name,
-      keys: Object.keys(signingClient || {}),
-      hasExecute: typeof (signingClient as any)?.execute,
-      hasSignAndBroadcast: typeof (signingClient as any)?.signAndBroadcast,
-      hasSign: typeof (signingClient as any)?.sign,
-      hasBroadcastTx: typeof (signingClient as any)?.broadcastTx,
-    });
-
-    const executeMsg = msg;
-
-    const msgExecuteContract = {
-      typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
-      value: {
-        sender: senderAddress,
-        contract: XION.contracts.milestoneChecker,
-        msg: Array.from(toUtf8(JSON.stringify(executeMsg))) as unknown as Uint8Array,
-        funds: [],
-      },
-    };
-
-    console.log("[XION MSG ENCODING CHECK]", {
-      typeUrl: msgExecuteContract.typeUrl,
-      valueType: typeof msgExecuteContract.value,
-      msgIsUint8Array: msgExecuteContract.value?.msg instanceof Uint8Array,
-      msgIsArray: Array.isArray(msgExecuteContract.value?.msg),
-      msgJsonPreview: executeMsg,
-    });
-
-    const executePromise = signingClient.signAndBroadcast(
+    const res = await adapter.execute({
+      signingClient,
       senderAddress,
-      [msgExecuteContract],
-      'auto'
-    );
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("XION milestone transaction timed out (60s).")), 60000)
-    );
-
-    const res = await Promise.race([executePromise, timeoutPromise]) as any;
+      contractAddress: XION.contracts.milestoneChecker,
+      msg,
+    });
 
     console.log("[XION EXECUTE RESULT]", {
       role: "milestoneChecker",
       result: res,
-      transactionHash: res?.transactionHash,
-      height: res?.height,
-      gasUsed: res?.gasUsed,
     });
 
     return {
@@ -523,12 +330,7 @@ export async function txCheckAndRelease({
       explorerUrl: explorerTxUrl(res.transactionHash),
     };
   } catch (error: any) {
-    console.error("[XION EXECUTE ERROR]", {
-      role: "milestoneChecker",
-      error,
-      message: error?.message,
-      stack: error?.stack,
-    });
+    console.error("[XION EXECUTE ERROR]", error);
     throw error;
   }
 }
@@ -542,14 +344,17 @@ export async function txFundProgram(
   amountUxion: string       // e.g. "1000000" for 1 XION
 ): Promise<TxResult> {
   assertKnownContractTarget(XION.contracts.grantEscrow, 'grantEscrow');
-  const res = await signingClient.execute(
+  const adapter = getXionSubmitter(signingClient);
+  if (adapter.mode === "unsupported") {
+    throw new Error(`XION Sync failed: ${adapter.reason}`);
+  }
+
+  const res = await adapter.execute({
+    signingClient,
     senderAddress,
-    XION.contracts.grantEscrow,
-    { fund_program: { program_id: programId } },
-    'auto',
-    undefined,
-    [{ denom: 'uxion', amount: amountUxion }]
-  );
+    contractAddress: XION.contracts.grantEscrow,
+    msg: { fund_program: { program_id: programId } },
+  });
   return {
     txHash:      res.transactionHash,
     height:      res.height,
