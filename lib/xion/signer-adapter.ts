@@ -1,4 +1,5 @@
 import { ExecuteResult } from "@cosmjs/cosmwasm-stargate";
+import { XION } from "./config";
 
 export type ExecuteArgs = {
   contractAddress: string;
@@ -7,150 +8,165 @@ export type ExecuteArgs = {
   signingClient: any;
 };
 
+export type SigningDiagnostics = {
+  signingMode: string;
+  feePayer: string;
+  feegrantStatus: string;
+  canSubmitTx: boolean;
+  requiredAction: string;
+};
+
 export type XionSubmitter =
   | {
       mode: "session_execute";
+      diagnostics: SigningDiagnostics;
       execute: (args: ExecuteArgs) => Promise<ExecuteResult>;
     }
   | {
-      mode: "popup_sign_broadcast";
+      mode: "popup_direct";
+      diagnostics: SigningDiagnostics;
       execute: (args: ExecuteArgs) => Promise<ExecuteResult>;
     }
   | {
       mode: "server_testnet";
+      diagnostics: SigningDiagnostics;
       execute: (args: ExecuteArgs) => Promise<ExecuteResult>;
     }
   | {
+      mode: "session_requires_feegrant";
+      diagnostics: SigningDiagnostics;
+      reason: string;
+    }
+  | {
       mode: "unsupported";
+      diagnostics: SigningDiagnostics;
       reason: string;
     };
 
-/**
- * SDK Audit: log the signing client's real capabilities at detection time.
- * This replaces guessing by constructor name with capability probing.
- */
-function auditSigningClient(signingClient: any): {
-  constructorName: string;
-  hasExecute: boolean;
-  hasSignAndBroadcast: boolean;
-  hasSession: boolean;
-  hasSignArb: boolean;
-  protoKeys: string[];
-  ownKeys: string[];
-} {
-  const proto = Object.getPrototypeOf(signingClient ?? {});
+function auditClient(signingClient: any) {
   return {
     constructorName: signingClient?.constructor?.name ?? "unknown",
     hasExecute: typeof signingClient?.execute === "function",
     hasSignAndBroadcast: typeof signingClient?.signAndBroadcast === "function",
-    hasSession: Boolean(signingClient?.session),
-    hasSignArb: typeof signingClient?.signArb === "function",
-    protoKeys: proto ? Object.getOwnPropertyNames(proto) : [],
-    ownKeys: Object.keys(signingClient ?? {}),
   };
 }
 
-/**
- * Resolve the correct signing adapter based on the client's ACTUAL capabilities,
- * not its minified constructor name.
- *
- * Priority order:
- * 1. Session execute — GranteeSignerClient (extends SigningCosmWasmClient).
- *    Has native .execute(). This is the preferred path when AbstraxionProvider
- *    is configured with `contracts` grants.
- * 2. Popup signAndBroadcast — PopupSigningClient / RedirectSigningClient / IframeSigningClient.
- *    Has .signAndBroadcast() but NO .execute(). Constructs EncodeObject manually.
- * 3. Server testnet fallback — only if explicitly enabled via env var.
- * 4. Unsupported — no known execution method found.
- */
+const hasTreasury = Boolean(XION.treasury);
+
 export function getXionSubmitter(signingClient: any): XionSubmitter {
   if (!signingClient) {
-    return { mode: "unsupported", reason: "No signing client provided" };
-  }
-
-  const audit = auditSigningClient(signingClient);
-
-  console.log("[XION SDK AUDIT]", audit);
-
-  // ── Path 1: Client has .execute() — GranteeSignerClient or AAClient ──────
-  // GranteeSignerClient extends SigningCosmWasmClient which has .execute().
-  // This is the session-key path where the user already approved grants.
-  // The client handles MsgExec wrapping, fee grants, and gas internally.
-  if (audit.hasExecute) {
     return {
-      mode: "session_execute",
-      execute: async ({ contractAddress, msg, senderAddress }) => {
-        console.log("[XION SUBMIT] Using session .execute() path", {
-          senderAddress,
-          contractAddress,
-          constructorName: audit.constructorName,
-        });
-        return await signingClient.execute(
-          senderAddress,
-          contractAddress,
-          msg,
-          "auto"
-        );
+      mode: "unsupported",
+      reason: "No signing client provided",
+      diagnostics: {
+        signingMode: "none",
+        feePayer: "none",
+        feegrantStatus: "n/a",
+        canSubmitTx: false,
+        requiredAction: "Connect XION wallet",
       },
     };
   }
 
-  // ── Path 2: Client has .signAndBroadcast() but no .execute() ─────────────
-  // PopupSigningClient, RedirectSigningClient, IframeSigningClient.
-  // These delegate to the dashboard popup/redirect/iframe for user approval.
-  // We must construct the MsgExecuteContract EncodeObject manually.
-  //
-  // IMPORTANT: The popup transport JSON-serializes messages. The `msg` field
-  // of MsgExecuteContract is `bytes` (Uint8Array) which doesn't survive
-  // JSON.stringify. We use Array.from() to convert to a plain number array
-  // which the dashboard can reconstruct.
+  const audit = auditClient(signingClient);
+  console.log("[XION SDK AUDIT]", audit);
+
+  // ── Path 1: Session execute (GranteeSignerClient) ───────────────────────
+  // Has .execute() → GranteeSignerClient or AAClient.
+  // But REQUIRES treasury/feegrant for gas payment.
+  if (audit.hasExecute) {
+    if (!hasTreasury) {
+      // Session client exists but cannot pay fees without treasury.
+      // Mark as incompatible — do NOT attempt .execute().
+      return {
+        mode: "session_requires_feegrant",
+        reason:
+          "Session key signing requires fee sponsorship (treasury), but no treasury is configured. " +
+          "Reconnect your XION wallet — the app will use direct signing where your wallet pays gas.",
+        diagnostics: {
+          signingMode: "Session Key (.execute)",
+          feePayer: "none — treasury not configured",
+          feegrantStatus: "MISSING",
+          canSubmitTx: false,
+          requiredAction: "Configure NEXT_PUBLIC_XION_TREASURY_ADDRESS or reconnect for direct signing",
+        },
+      };
+    }
+
+    // Treasury configured — session execute should work.
+    return {
+      mode: "session_execute",
+      diagnostics: {
+        signingMode: "Session Key (.execute)",
+        feePayer: `Treasury: ${XION.treasury}`,
+        feegrantStatus: "configured",
+        canSubmitTx: true,
+        requiredAction: "none",
+      },
+      execute: async ({ contractAddress, msg, senderAddress }) => {
+        console.log("[XION SUBMIT] Session .execute()", { senderAddress, contractAddress });
+        return await signingClient.execute(senderAddress, contractAddress, msg, "auto");
+      },
+    };
+  }
+
+  // ── Path 2: Popup direct signing (PopupSigningClient) ───────────────────
+  // Has .signAndBroadcast() but no .execute().
+  // User approves via popup, user's meta-account pays gas directly.
+  // No treasury or feegrant needed.
   if (audit.hasSignAndBroadcast) {
     return {
-      mode: "popup_sign_broadcast",
+      mode: "popup_direct",
+      diagnostics: {
+        signingMode: "Direct Signing (popup)",
+        feePayer: "User wallet (meta-account)",
+        feegrantStatus: "not required",
+        canSubmitTx: true,
+        requiredAction: "none — user approves each transaction in popup",
+      },
       execute: async ({ contractAddress, msg, senderAddress }) => {
-        console.log("[XION SUBMIT] Using popup .signAndBroadcast() path", {
-          senderAddress,
-          contractAddress,
-          constructorName: audit.constructorName,
-        });
+        console.log("[XION SUBMIT] Popup .signAndBroadcast()", { senderAddress, contractAddress });
 
         const { toUtf8 } = await import("@cosmjs/encoding");
+
+        // For popup transport: the PopupController JSON-serializes messages for
+        // the dashboard. Uint8Array doesn't survive JSON.stringify, so we encode
+        // the contract msg as a plain number array which the dashboard can
+        // reconstruct. This matches the Array.from pattern proven in prior iterations.
+        const msgBytes = toUtf8(JSON.stringify(msg));
+
         const encodedMsg = {
           typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
           value: {
             sender: senderAddress,
             contract: contractAddress,
-            msg: Array.from(toUtf8(JSON.stringify(msg))) as any,
+            msg: Array.from(msgBytes) as any,
             funds: [],
           },
         };
 
-        return await signingClient.signAndBroadcast(
-          senderAddress,
-          [encodedMsg],
-          "auto"
-        );
+        return await signingClient.signAndBroadcast(senderAddress, [encodedMsg], "auto");
       },
     };
   }
 
-  // ── Path 3: Server testnet fallback (disabled by default) ────────────────
+  // ── Path 3: Server testnet fallback ─────────────────────────────────────
   if (process.env.NEXT_PUBLIC_XION_ENABLE_SERVER_SUBMIT === "true") {
     return {
       mode: "server_testnet",
+      diagnostics: {
+        signingMode: "Server Testnet Operator",
+        feePayer: "Server wallet",
+        feegrantStatus: "n/a (server-side)",
+        canSubmitTx: true,
+        requiredAction: "none — testnet fallback",
+      },
       execute: async ({ contractAddress, msg, senderAddress }) => {
-        console.warn(
-          "[XION SUBMIT] Using server testnet fallback — NOT for production",
-          { senderAddress, contractAddress }
-        );
+        console.warn("[XION SUBMIT] Server testnet fallback", { senderAddress, contractAddress });
         const response = await fetch("/api/xion/submit-batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contractAddress,
-            msg,
-            originalSender: senderAddress,
-          }),
+          body: JSON.stringify({ contractAddress, msg, originalSender: senderAddress }),
         });
         if (!response.ok) {
           const err = await response.json();
@@ -163,8 +179,13 @@ export function getXionSubmitter(signingClient: any): XionSubmitter {
 
   return {
     mode: "unsupported",
-    reason: `Signing client "${audit.constructorName}" has neither .execute() nor .signAndBroadcast(). ` +
-      `This usually means AbstraxionProvider is not configured with contract grants, ` +
-      `so the session key has no permissions. Reconnect your XION wallet to approve grants.`,
+    reason: `Client "${audit.constructorName}" has no supported execution method.`,
+    diagnostics: {
+      signingMode: `Unknown (${audit.constructorName})`,
+      feePayer: "unknown",
+      feegrantStatus: "unknown",
+      canSubmitTx: false,
+      requiredAction: "Reconnect XION wallet",
+    },
   };
 }

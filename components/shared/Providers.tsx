@@ -12,9 +12,7 @@ const AbstraxionProvider = dynamic(
   { ssr: false }
 );
 
-// Build the contracts grant list so the Abstraxion session key is authorized
-// to execute against our deployed contracts. Without this, every execute()
-// call fails with "account not found" because the grantee has no permissions.
+// Contract addresses used for session grants (only when treasury is configured).
 const abstraxionContracts: string[] = [
   XION.contracts.vaccinationRecord,
   XION.contracts.milestoneChecker,
@@ -22,21 +20,27 @@ const abstraxionContracts: string[] = [
   XION.contracts.grantEscrow,
 ].filter(Boolean);
 
+const hasTreasury = Boolean(XION.treasury);
+
+// ── Config strategy ─────────────────────────────────────────────────────────
+// WITH treasury: session grants mode. The session key gets ContractExecution
+//   grants + fee sponsorship from the treasury. GranteeSignerClient.execute()
+//   works without user approval per tx. Gas is paid by treasury.
+//
+// WITHOUT treasury: no-grants path (direct signing). The user authenticates
+//   but no on-chain grants are created. useAbstraxionSigningClient({ requireAuth: true })
+//   returns PopupSigningClient which opens a dashboard popup per transaction.
+//   The user's funded meta-account pays gas directly.
 const abstraxionConfig = {
   chainId:  XION.chainId,
   rpcUrl:   XION.rpc,
   restUrl:  XION.rest,
   gasPrice: XION.gasPrice,
-  // Session grant mode: the Abstraxion auth flow will prompt the user to grant
-  // the session key permission to execute these contracts. This produces a
-  // GranteeSignerClient (extends SigningCosmWasmClient) with a native .execute()
-  // method — no popup needed per transaction.
-  contracts: abstraxionContracts,
-  // Treasury for sponsored gas (if configured). Without a treasury, the user's
-  // meta-account pays gas via a fee-grant to the session key.
-  ...(XION.treasury ? { treasury: XION.treasury } : {}),
+  ...(hasTreasury ? {
+    contracts: abstraxionContracts,
+    treasury: XION.treasury,
+  } : {}),
   authentication: {
-    // 'auto' resolves to 'popup' on desktop, 'redirect' on mobile/PWA.
     type: 'auto' as const,
     authAppUrl: XION.authApp,
   },
@@ -44,7 +48,6 @@ const abstraxionConfig = {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    // Audit and clear legacy contract caches on startup to prevent stale overrides.
     clearLegacyContractCache();
   }, []);
 

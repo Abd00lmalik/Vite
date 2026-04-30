@@ -18,23 +18,21 @@ import {
   type ScopedWalletState,
 } from '@/lib/xion/walletState';
 
+const hasTreasury = Boolean(XION.treasury);
+
 export function useXion() {
   const session = useAuthStore((state) => state.session);
   const { data: account, login, logout: logoutAccount, isLoading } =
     useAbstraxionAccount();
 
-  // ── Session key signing (GranteeSignerClient) ───────────────────────────
-  // Default mode: returns GranteeSignerClient which extends SigningCosmWasmClient.
-  // This client has native .execute() for CosmWasm contract calls.
-  // Requires: AbstraxionProvider configured with `contracts` grants.
-  // The user approved grants during the auth flow, so the session key can
-  // sign transactions locally without a popup per transaction.
-  const { client: signingClient, signArb } =
+  // Session key client (GranteeSignerClient) — has .execute(), needs feegrant.
+  // Only useful when treasury is configured for fee sponsorship.
+  const { client: sessionClient, signArb } =
     useAbstraxionSigningClient();
 
-  // ── Direct signing client (PopupSigningClient) — fallback only ──────────
-  // Only used as a diagnostic/fallback. Has .signAndBroadcast() but no .execute().
-  const { client: directSigningClient, error: directSigningError } =
+  // Direct signing client (PopupSigningClient) — has .signAndBroadcast(),
+  // user pays gas via popup approval. Works without treasury/feegrant.
+  const { client: directClient, error: directSigningError } =
     useAbstraxionSigningClient({ requireAuth: true });
 
   const { client: queryClient } = useAbstraxionClient();
@@ -42,26 +40,41 @@ export function useXion() {
   const [boundWallet, setBoundWallet] = useState<ScopedWalletState | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
 
-  // ── SDK Audit: log client capabilities on every change ──────────────────
-  useEffect(() => {
-    // Use the session client if available, otherwise fall back to direct
-    const activeClient = signingClient ?? directSigningClient;
-    if (!activeClient) return;
+  // Choose the right client based on treasury availability:
+  // - With treasury: prefer session client (GranteeSignerClient, gasless)
+  // - Without treasury: use direct client (PopupSigningClient, user pays gas)
+  const signingMode: 'session' | 'direct' | 'none' = useMemo(() => {
+    if (hasTreasury && sessionClient) return 'session';
+    if (directClient) return 'direct';
+    if (sessionClient) return 'session'; // fallback, will warn about feegrant
+    return 'none';
+  }, [sessionClient, directClient]);
 
-    const proto = Object.getPrototypeOf(activeClient);
-    const clientAny = activeClient as any;
+  const activeSigningClient = useMemo(() => {
+    if (signingMode === 'session') return sessionClient ?? null;
+    if (signingMode === 'direct') return directClient ?? null;
+    return null;
+  }, [signingMode, sessionClient, directClient]);
+
+  // SDK Audit logging
+  useEffect(() => {
+    const c = activeSigningClient;
+    if (!c) return;
+    const clientAny = c as any;
+    const proto = Object.getPrototypeOf(c);
     console.log("[XION SDK AUDIT]", {
+      signingMode,
+      hasTreasury,
       clientConstructor: clientAny?.constructor?.name,
-      clientKeys: Object.keys(clientAny ?? {}),
       prototypeKeys: Object.getOwnPropertyNames(proto ?? {}),
       hasExecute: typeof clientAny?.execute,
       hasSignAndBroadcast: typeof clientAny?.signAndBroadcast,
       hasSignArb: typeof signArb,
-      sessionClient: signingClient?.constructor?.name ?? "none",
-      directClient: directSigningClient?.constructor?.name ?? "none",
+      sessionClient: (sessionClient as any)?.constructor?.name ?? "none",
+      directClient: (directClient as any)?.constructor?.name ?? "none",
       directSigningError: directSigningError ?? "none",
     });
-  }, [signingClient, directSigningClient, signArb, directSigningError]);
+  }, [activeSigningClient, signingMode, sessionClient, directClient, signArb, directSigningError]);
 
   // Handle ?granted=true redirect from Abstraxion auth
   useEffect(() => {
@@ -72,7 +85,6 @@ export function useXion() {
           connectIntentUserRef.current = session.userId;
         }
         login();
-        // Remove the param from URL
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
@@ -110,15 +122,11 @@ export function useXion() {
         walletAddress: currentAddress,
         connectedAt: new Date().toISOString(),
       };
-      // Always store in localStorage for UI display
       writeScopedWalletState(state);
       setBoundWallet(state);
       setWalletError(null);
       connectIntentUserRef.current = null;
 
-      // Only write to Dexie if the address is verified on-chain.
-      // This prevents stale/ephemeral abstract account addresses from
-      // poisoning the sync pipeline via resolvePatientPayoutAddress.
       void (async () => {
         try {
           const preflight = await checkXionAccountPreflight(currentAddress);
@@ -138,7 +146,6 @@ export function useXion() {
             );
           }
         } catch (error) {
-          // Network error — store optimistically but log the issue
           console.warn(
             `[useXion] Could not verify wallet ${currentAddress} on-chain (network error). ` +
             `Writing to Dexie optimistically.`,
@@ -153,7 +160,6 @@ export function useXion() {
       return;
     }
 
-    // A wallet is connected but not bound to the current authenticated account.
     setWalletError('Connected wallet does not match this account. Reconnect your wallet.');
     logoutAccount?.();
     setBoundWallet(null);
@@ -173,10 +179,6 @@ export function useXion() {
     if (boundWallet.userId !== session.userId) return null;
     return boundWallet.walletAddress === currentAddress ? currentAddress : null;
   }, [account?.bech32Address, boundWallet, session?.userId]);
-
-  // Prefer the session client (GranteeSignerClient with .execute()),
-  // fall back to direct client (PopupSigningClient with .signAndBroadcast())
-  const activeSigningClient = signingClient ?? directSigningClient ?? null;
 
   function connect() {
     if (!session?.userId) {
@@ -207,6 +209,7 @@ export function useXion() {
     address,
     account,
     signingClient: activeSigningClient,
+    signingMode,
     queryClient,
     connect,
     login: connect,

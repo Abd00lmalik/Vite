@@ -381,20 +381,24 @@ export function SyncPanel() {
         </p>
       ) : null}
 
-      {SHOW_XION_DEBUG && signingClient && (
+      {SHOW_XION_DEBUG && signingClient && adapter && 'diagnostics' in adapter && (
         <div className="mt-2 rounded border border-ui-border bg-ui-surface p-2 text-[10px] leading-tight text-ui-text-muted">
           <div className="font-semibold uppercase tracking-wider opacity-60">Signing Diagnostics</div>
           <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
             <span>Signing mode:</span>
-            <span className="font-mono text-ui-text">
-              {adapter.mode === 'session_execute' ? 'Session Key (.execute)' : 
-               adapter.mode === 'popup_sign_broadcast' ? 'Popup (.signAndBroadcast)' : 
-               adapter.mode === 'server_testnet' ? 'Server Testnet' : 'Unsupported'}
-            </span>
+            <span className="font-mono text-ui-text">{adapter.diagnostics.signingMode}</span>
             
-            <span>Compatibility:</span>
-            <span className={`font-medium ${adapter.mode !== 'unsupported' ? 'text-who-green' : 'text-who-orange'}`}>
-              {adapter.mode !== 'unsupported' ? 'YES (Compatible)' : 'NO (Incompatible)'}
+            <span>Fee payer:</span>
+            <span className="font-mono text-ui-text truncate" title={adapter.diagnostics.feePayer}>
+              {adapter.diagnostics.feePayer}
+            </span>
+
+            <span>Feegrant status:</span>
+            <span className="font-mono text-ui-text">{adapter.diagnostics.feegrantStatus}</span>
+
+            <span>Can submit tx:</span>
+            <span className={`font-medium ${adapter.diagnostics.canSubmitTx ? 'text-who-green' : 'text-who-orange'}`}>
+              {adapter.diagnostics.canSubmitTx ? 'YES' : 'NO'}
             </span>
 
             <span>Signer Type:</span>
@@ -409,9 +413,14 @@ export function SyncPanel() {
               </>
             )}
           </div>
-          {adapter.mode === 'unsupported' && (
+          {adapter.diagnostics.requiredAction !== 'none' && (
             <p className="mt-2 font-medium text-who-orange">
-              Error: {adapter.reason}. Try reconnecting your XION wallet.
+              Action required: {adapter.diagnostics.requiredAction}
+            </p>
+          )}
+          {'reason' in adapter && adapter.reason && (
+            <p className="mt-1 text-who-orange">
+              Error: {adapter.reason}
             </p>
           )}
         </div>

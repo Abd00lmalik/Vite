@@ -206,7 +206,7 @@ export async function txSubmitBatch({
     signerAddress: (signingClient as any)?.signer?.address,
   });
 
-  if (adapter.mode === "unsupported") {
+  if (adapter.mode === "unsupported" || adapter.mode === "session_requires_feegrant") {
     throw new Error(`XION Sync failed: ${adapter.reason}`);
   }
 
@@ -307,7 +307,7 @@ export async function txCheckAndRelease({
 
   const adapter = getXionSubmitter(signingClient);
 
-  if (adapter.mode === "unsupported") {
+  if (adapter.mode === "unsupported" || adapter.mode === "session_requires_feegrant") {
     throw new Error(`XION Sync failed: ${adapter.reason}`);
   }
 
@@ -345,7 +345,7 @@ export async function txFundProgram(
 ): Promise<TxResult> {
   assertKnownContractTarget(XION.contracts.grantEscrow, 'grantEscrow');
   const adapter = getXionSubmitter(signingClient);
-  if (adapter.mode === "unsupported") {
+  if (adapter.mode === "unsupported" || adapter.mode === "session_requires_feegrant") {
     throw new Error(`XION Sync failed: ${adapter.reason}`);
   }
 
