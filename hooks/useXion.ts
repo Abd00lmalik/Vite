@@ -22,12 +22,46 @@ export function useXion() {
   const session = useAuthStore((state) => state.session);
   const { data: account, login, logout: logoutAccount, isLoading } =
     useAbstraxionAccount();
-  const { client: signingClient } =
+
+  // ── Session key signing (GranteeSignerClient) ───────────────────────────
+  // Default mode: returns GranteeSignerClient which extends SigningCosmWasmClient.
+  // This client has native .execute() for CosmWasm contract calls.
+  // Requires: AbstraxionProvider configured with `contracts` grants.
+  // The user approved grants during the auth flow, so the session key can
+  // sign transactions locally without a popup per transaction.
+  const { client: signingClient, signArb } =
+    useAbstraxionSigningClient();
+
+  // ── Direct signing client (PopupSigningClient) — fallback only ──────────
+  // Only used as a diagnostic/fallback. Has .signAndBroadcast() but no .execute().
+  const { client: directSigningClient, error: directSigningError } =
     useAbstraxionSigningClient({ requireAuth: true });
+
   const { client: queryClient } = useAbstraxionClient();
   const connectIntentUserRef = useRef<string | null>(null);
   const [boundWallet, setBoundWallet] = useState<ScopedWalletState | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
+
+  // ── SDK Audit: log client capabilities on every change ──────────────────
+  useEffect(() => {
+    // Use the session client if available, otherwise fall back to direct
+    const activeClient = signingClient ?? directSigningClient;
+    if (!activeClient) return;
+
+    const proto = Object.getPrototypeOf(activeClient);
+    const clientAny = activeClient as any;
+    console.log("[XION SDK AUDIT]", {
+      clientConstructor: clientAny?.constructor?.name,
+      clientKeys: Object.keys(clientAny ?? {}),
+      prototypeKeys: Object.getOwnPropertyNames(proto ?? {}),
+      hasExecute: typeof clientAny?.execute,
+      hasSignAndBroadcast: typeof clientAny?.signAndBroadcast,
+      hasSignArb: typeof signArb,
+      sessionClient: signingClient?.constructor?.name ?? "none",
+      directClient: directSigningClient?.constructor?.name ?? "none",
+      directSigningError: directSigningError ?? "none",
+    });
+  }, [signingClient, directSigningClient, signArb, directSigningError]);
 
   // Handle ?granted=true redirect from Abstraxion auth
   useEffect(() => {
@@ -140,6 +174,10 @@ export function useXion() {
     return boundWallet.walletAddress === currentAddress ? currentAddress : null;
   }, [account?.bech32Address, boundWallet, session?.userId]);
 
+  // Prefer the session client (GranteeSignerClient with .execute()),
+  // fall back to direct client (PopupSigningClient with .signAndBroadcast())
+  const activeSigningClient = signingClient ?? directSigningClient ?? null;
+
   function connect() {
     if (!session?.userId) {
       setWalletError('Sign in before connecting a XION wallet.');
@@ -168,7 +206,7 @@ export function useXion() {
   return {
     address,
     account,
-    signingClient,
+    signingClient: activeSigningClient,
     queryClient,
     connect,
     login: connect,
@@ -202,6 +240,3 @@ export function useXionBalance(address: string | null) {
 
   return { balance, loading };
 }
-
-
-

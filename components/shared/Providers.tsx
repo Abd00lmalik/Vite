@@ -24,16 +24,19 @@ const abstraxionContracts: string[] = [
 
 const abstraxionConfig = {
   chainId:  XION.chainId,
-  ...(XION.treasury ? { treasury: XION.treasury } : {}),
   rpcUrl:   XION.rpc,
   restUrl:  XION.rest,
   gasPrice: XION.gasPrice,
-  // Using the "no-grants path" (direct user signing). 
-  // We do not define 'contracts' or 'treasury'. Users will sign transactions
-  // directly and pay gas from their connected meta-account balance.
+  // Session grant mode: the Abstraxion auth flow will prompt the user to grant
+  // the session key permission to execute these contracts. This produces a
+  // GranteeSignerClient (extends SigningCosmWasmClient) with a native .execute()
+  // method — no popup needed per transaction.
+  contracts: abstraxionContracts,
+  // Treasury for sponsored gas (if configured). Without a treasury, the user's
+  // meta-account pays gas via a fee-grant to the session key.
+  ...(XION.treasury ? { treasury: XION.treasury } : {}),
   authentication: {
     // 'auto' resolves to 'popup' on desktop, 'redirect' on mobile/PWA.
-    // This is the recommended default per the Abstraxion SDK docs.
     type: 'auto' as const,
     authAppUrl: XION.authApp,
   },
@@ -67,6 +70,3 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </AbstraxionProvider>
   );
 }
-
-
-

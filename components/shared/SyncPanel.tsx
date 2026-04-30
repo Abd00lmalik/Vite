@@ -387,8 +387,8 @@ export function SyncPanel() {
           <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
             <span>Signing mode:</span>
             <span className="font-mono text-ui-text">
-              {adapter.mode === 'browser_direct' ? 'Direct Wallet' : 
-               adapter.mode === 'browser_session' ? 'Abstraxion Session' : 
+              {adapter.mode === 'session_execute' ? 'Session Key (.execute)' : 
+               adapter.mode === 'popup_sign_broadcast' ? 'Popup (.signAndBroadcast)' : 
                adapter.mode === 'server_testnet' ? 'Server Testnet' : 'Unsupported'}
             </span>
             

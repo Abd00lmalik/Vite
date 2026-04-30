@@ -598,13 +598,20 @@ export async function runSync(
       });
     }
 
-    if (typeof (signingClient as any).signAndBroadcast !== "function") {
+    const hasExecute = typeof (signingClient as any).execute === "function";
+    const hasSignAndBroadcast = typeof (signingClient as any).signAndBroadcast === "function";
+    if (!hasExecute && !hasSignAndBroadcast) {
       return failureResult({
         batchId: 'client-invalid',
         recordCount: scopedVaccinations.length,
         merkleRoot: '0x0',
         mode: 'onchain',
-        errors: ['XION signing client is not ready or does not support signing. Reconnect XION and authorize signing.'],
+        errors: [
+          `XION signing client (${(signingClient as any)?.constructor?.name ?? 'unknown'}) ` +
+          `has neither .execute() nor .signAndBroadcast(). ` +
+          `This usually means session grants were not approved. ` +
+          `Disconnect and reconnect your XION wallet to approve contract grants.`
+        ],
       });
     }
 
