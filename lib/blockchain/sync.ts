@@ -159,6 +159,10 @@ function classifySyncError(
     return 'Sync was rejected by the contract. Your wallet may not be registered as an authorized issuer.';
   }
 
+  if (message.includes('does not allow to pay fees') || message.includes('fee-grant not found')) {
+    return 'XION fee grant missing or session not authorized. Reconnect your wallet or approve the transaction to pay gas fees.';
+  }
+
   if (
     message.includes('insufficient') &&
     (message.includes('uxion') || message.includes('gas') || message.includes('fee') || message.includes('fund'))

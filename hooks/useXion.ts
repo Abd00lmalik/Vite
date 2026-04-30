@@ -23,7 +23,7 @@ export function useXion() {
   const { data: account, login, logout: logoutAccount, isLoading } =
     useAbstraxionAccount();
   const { client: signingClient } =
-    useAbstraxionSigningClient();
+    useAbstraxionSigningClient({ requireAuth: true });
   const { client: queryClient } = useAbstraxionClient();
   const connectIntentUserRef = useRef<string | null>(null);
   const [boundWallet, setBoundWallet] = useState<ScopedWalletState | null>(null);

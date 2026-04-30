@@ -194,13 +194,40 @@ export async function txSubmitBatch({
     };
   }));
 
-  // Step 1: Verify actual signer
-  console.log("[FINAL SIGNER CHECK]", {
-    uiWalletAddress: senderAddress, // Assuming senderAddress passed from UI
+  // Step 1: Verify actual signer and resolve signing mode
+  const signingClientType = signingClient?.constructor?.name ?? typeof signingClient;
+  const hasSession = Boolean(signingClient?.session);
+  const isDirectClient = signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
+  
+  type XionSigningMode = "direct_user_paid" | "abstraxion_session_feegrant" | "unsupported";
+  let resolvedMode: XionSigningMode = "unsupported";
+
+  if (isDirectClient) {
+    resolvedMode = "direct_user_paid";
+  } else if (hasSession || signingClientType === 'GranteeSignerClient') {
+    resolvedMode = "abstraxion_session_feegrant";
+  }
+
+  console.log("[XION SIGNING MODE RESOLVED]", {
+    mode: resolvedMode,
+    hasSession,
+    signerAddress: signingClient?.signer?.address,
     senderAddressPassedToExecute: senderAddress,
-    signingClientType: signingClient?.constructor?.name ?? typeof signingClient,
-    hasSession: Boolean(signingClient?.session),
-    signerAddress: signingClient?.signer?.address, // Internal signer if exposed
+    signingClientType,
+    treasuryConfigured: Boolean(XION.treasury),
+    gasPrice: XION.gasPrice,
+  });
+
+  if (resolvedMode === "abstraxion_session_feegrant" && !XION.treasury && !hasSession) {
+    console.warn("WARNING: Using session feegrant mode but no treasury is configured and no session is active. Transaction may fail with fee-grant not found.");
+  }
+
+  console.log("[FINAL SIGNER CHECK]", {
+    uiWalletAddress: senderAddress,
+    senderAddressPassedToExecute: senderAddress,
+    signingClientType,
+    hasSession,
+    signerAddress: signingClient?.signer?.address,
   });
 
   // Step 6: Hard guard
@@ -348,12 +375,39 @@ export async function txCheckAndRelease({
     };
   }));
 
-  // Step 1: Verify actual signer
+  // Step 1: Verify actual signer and resolve signing mode
+  const signingClientType = signingClient?.constructor?.name ?? typeof signingClient;
+  const hasSession = Boolean(signingClient?.session);
+  const isDirectClient = signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
+  
+  type XionSigningMode = "direct_user_paid" | "abstraxion_session_feegrant" | "unsupported";
+  let resolvedMode: XionSigningMode = "unsupported";
+
+  if (isDirectClient) {
+    resolvedMode = "direct_user_paid";
+  } else if (hasSession || signingClientType === 'GranteeSignerClient') {
+    resolvedMode = "abstraxion_session_feegrant";
+  }
+
+  console.log("[XION SIGNING MODE RESOLVED]", {
+    mode: resolvedMode,
+    hasSession,
+    signerAddress: signingClient?.signer?.address,
+    senderAddressPassedToExecute: senderAddress,
+    signingClientType,
+    treasuryConfigured: Boolean(XION.treasury),
+    gasPrice: XION.gasPrice,
+  });
+
+  if (resolvedMode === "abstraxion_session_feegrant" && !XION.treasury && !hasSession) {
+    console.warn("WARNING: Using session feegrant mode but no treasury is configured and no session is active. Transaction may fail with fee-grant not found.");
+  }
+
   console.log("[FINAL SIGNER CHECK]", {
     uiWalletAddress: senderAddress,
     senderAddressPassedToExecute: senderAddress,
-    signingClientType: signingClient?.constructor?.name ?? typeof signingClient,
-    hasSession: Boolean(signingClient?.session),
+    signingClientType,
+    hasSession,
     signerAddress: signingClient?.signer?.address,
   });
 

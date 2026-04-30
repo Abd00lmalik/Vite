@@ -28,10 +28,9 @@ const abstraxionConfig = {
   rpcUrl:   XION.rpc,
   restUrl:  XION.rest,
   gasPrice: XION.gasPrice,
-  // Grant the session key permission to call our contracts.
-  // This is REQUIRED — without it the session key has zero contract permissions
-  // and every signingClient.execute() call will fail.
-  contracts: abstraxionContracts,
+  // Using the "no-grants path" (direct user signing). 
+  // We do not define 'contracts' or 'treasury'. Users will sign transactions
+  // directly and pay gas from their connected meta-account balance.
   authentication: {
     // 'auto' resolves to 'popup' on desktop, 'redirect' on mobile/PWA.
     // This is the recommended default per the Abstraxion SDK docs.
