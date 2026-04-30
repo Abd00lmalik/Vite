@@ -244,24 +244,44 @@ export async function txSubmitBatch({
 
   try {
 
-    // Create raw CosmWasm execute message using the official pattern
-    // expected by Abstraxion direct signing clients.
+    console.log("[SIGNING CLIENT SHAPE]", {
+      constructorName: signingClient?.constructor?.name,
+      keys: Object.keys(signingClient || {}),
+      hasExecute: typeof (signingClient as any)?.execute,
+      hasSignAndBroadcast: typeof (signingClient as any)?.signAndBroadcast,
+      hasSign: typeof (signingClient as any)?.sign,
+      hasBroadcastTx: typeof (signingClient as any)?.broadcastTx,
+    });
+
+    const executeMsg = msg; // Using the provided msg exactly
+
+    // The Abstraxion dashboard expects the messages array to be serialized using JSON.stringify.
+    // If msg is a Uint8Array, JSON.stringify mangles it into {"0":123,...}, causing the node to reject it.
+    // We pass the msg as a base64 string instead or raw UTF-8 bytes to ensure correct dashboard handling.
+    // I'll construct the msg in base64.
+    // The Abstraxion dashboard runs JSON.parse(tx).
+    // If msg is a Uint8Array, JSON.stringify(Uint8Array) outputs {"0":123,...}
+    // which the dashboard CANNOT decode back into bytes!
+    // However, if we pass it as a Base64 string, and the dashboard uses
+    // MsgExecuteContract.fromJSON(parsed), cosmjs's fromJSON natively
+    // converts base64 strings back to Uint8Array for the `msg` field!
     const msgExecuteContract = {
       typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
-      value: MsgExecuteContract.fromPartial({
+      value: {
         sender: senderAddress,
         contract: XION.contracts.vaccinationRecord,
-        msg: toUtf8(JSON.stringify(msg)),
+        msg: btoa(JSON.stringify(executeMsg)) as unknown as Uint8Array,
         funds: [],
-      }),
+      },
     };
 
     console.log("[XION MSG ENCODING CHECK]", {
       typeUrl: msgExecuteContract.typeUrl,
       valueType: typeof msgExecuteContract.value,
       msgIsUint8Array: msgExecuteContract.value?.msg instanceof Uint8Array,
-      msgJsonPreview: msg,
+      msgJsonPreview: executeMsg,
     });
+
 
     const executePromise = signingClient.signAndBroadcast(
       senderAddress,
@@ -441,16 +461,25 @@ export async function txCheckAndRelease({
 
   try {
 
-    // Create raw CosmWasm execute message using the official pattern
-    // expected by Abstraxion direct signing clients.
+    console.log("[SIGNING CLIENT SHAPE]", {
+      constructorName: signingClient?.constructor?.name,
+      keys: Object.keys(signingClient || {}),
+      hasExecute: typeof (signingClient as any)?.execute,
+      hasSignAndBroadcast: typeof (signingClient as any)?.signAndBroadcast,
+      hasSign: typeof (signingClient as any)?.sign,
+      hasBroadcastTx: typeof (signingClient as any)?.broadcastTx,
+    });
+
+    const executeMsg = msg;
+
     const msgExecuteContract = {
       typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
-      value: MsgExecuteContract.fromPartial({
+      value: {
         sender: senderAddress,
         contract: XION.contracts.milestoneChecker,
-        msg: toUtf8(JSON.stringify(msg)),
+        msg: btoa(JSON.stringify(executeMsg)) as unknown as Uint8Array,
         funds: [],
-      }),
+      },
     };
 
     console.log("[XION MSG ENCODING CHECK]", {
