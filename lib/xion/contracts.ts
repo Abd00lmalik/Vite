@@ -199,7 +199,8 @@ export async function txSubmitBatch({
   // Step 1: Verify actual signer and resolve signing mode
   const signingClientType = signingClient?.constructor?.name ?? typeof signingClient;
   const hasSession = Boolean(signingClient?.session);
-  const isDirectClient = signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
+  // 'io' is the minified constructor name for PopupSigningClient in some production builds
+  const isDirectClient = signingClientType === 'io' || signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
   
   type XionSigningMode = "direct_user_paid" | "abstraxion_session_feegrant" | "unsupported";
   let resolvedMode: XionSigningMode = "unsupported";
@@ -210,8 +211,11 @@ export async function txSubmitBatch({
     resolvedMode = "abstraxion_session_feegrant";
   }
 
+  // Refined classification as requested
+  const finalModeLabel = resolvedMode === "unsupported" ? "unsupported" : (resolvedMode === "direct_user_paid" ? "direct_popup_signAndBroadcast" : "abstraxion_session_feegrant");
+
   console.log("[XION SIGNING MODE RESOLVED]", {
-    mode: resolvedMode,
+    mode: finalModeLabel,
     hasSession,
     signerAddress: signingClient?.signer?.address,
     senderAddressPassedToExecute: senderAddress,
@@ -219,6 +223,10 @@ export async function txSubmitBatch({
     treasuryConfigured: Boolean(XION.treasury),
     gasPrice: XION.gasPrice,
   });
+
+  if (resolvedMode === "unsupported") {
+    throw new Error(`Unsupported XION signing client (type: ${signingClientType}). Cannot submit transaction.`);
+  }
 
   if (resolvedMode === "abstraxion_session_feegrant" && !XION.treasury && !hasSession) {
     console.warn("WARNING: Using session feegrant mode but no treasury is configured and no session is active. Transaction may fail with fee-grant not found.");
@@ -255,22 +263,16 @@ export async function txSubmitBatch({
 
     const executeMsg = msg; // Using the provided msg exactly
 
-    // The Abstraxion dashboard expects the messages array to be serialized using JSON.stringify.
-    // If msg is a Uint8Array, JSON.stringify mangles it into {"0":123,...}, causing the node to reject it.
-    // We pass the msg as a base64 string instead or raw UTF-8 bytes to ensure correct dashboard handling.
-    // I'll construct the msg in base64.
-    // The Abstraxion dashboard runs JSON.parse(tx).
-    // If msg is a Uint8Array, JSON.stringify(Uint8Array) outputs {"0":123,...}
-    // which the dashboard CANNOT decode back into bytes!
-    // However, if we pass it as a Base64 string, and the dashboard uses
-    // MsgExecuteContract.fromJSON(parsed), cosmjs's fromJSON natively
-    // converts base64 strings back to Uint8Array for the `msg` field!
+    // CRITICAL FIX: The Abstraxion dashboard expects the messages array to be serialized using JSON.stringify.
+    // 1. Uint8Array becomes {"0":123,...} -> BinaryWriter.bytes() sees no .length or invalid type -> writes 0 bytes.
+    // 2. string (base64) -> BinaryWriter.bytes() creates a Uint8Array of same length but ALL ZEROES because string[i] is NaN.
+    // 3. Array.from(uint8array) -> becomes [123, ...] -> JSON.stringify preserves it -> BinaryWriter.bytes() handles number[] perfectly.
     const msgExecuteContract = {
       typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
       value: {
         sender: senderAddress,
         contract: XION.contracts.vaccinationRecord,
-        msg: btoa(JSON.stringify(executeMsg)) as unknown as Uint8Array,
+        msg: Array.from(toUtf8(JSON.stringify(executeMsg))) as unknown as Uint8Array,
         funds: [],
       },
     };
@@ -279,6 +281,7 @@ export async function txSubmitBatch({
       typeUrl: msgExecuteContract.typeUrl,
       valueType: typeof msgExecuteContract.value,
       msgIsUint8Array: msgExecuteContract.value?.msg instanceof Uint8Array,
+      msgIsArray: Array.isArray(msgExecuteContract.value?.msg),
       msgJsonPreview: executeMsg,
     });
 
@@ -417,7 +420,8 @@ export async function txCheckAndRelease({
   // Step 1: Verify actual signer and resolve signing mode
   const signingClientType = signingClient?.constructor?.name ?? typeof signingClient;
   const hasSession = Boolean(signingClient?.session);
-  const isDirectClient = signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
+  // 'io' is the minified constructor name for PopupSigningClient in some production builds
+  const isDirectClient = signingClientType === 'io' || signingClientType.includes('Popup') || signingClientType.includes('Redirect') || signingClientType.includes('AAClient');
   
   type XionSigningMode = "direct_user_paid" | "abstraxion_session_feegrant" | "unsupported";
   let resolvedMode: XionSigningMode = "unsupported";
@@ -427,6 +431,9 @@ export async function txCheckAndRelease({
   } else if (hasSession || signingClientType === 'GranteeSignerClient') {
     resolvedMode = "abstraxion_session_feegrant";
   }
+
+  // Refined classification as requested
+  const finalModeLabel = resolvedMode === "unsupported" ? "unsupported" : (resolvedMode === "direct_user_paid" ? "direct_popup_signAndBroadcast" : "abstraxion_session_feegrant");
 
   console.log("[XION SIGNING MODE RESOLVED]", {
     mode: resolvedMode,
@@ -477,7 +484,7 @@ export async function txCheckAndRelease({
       value: {
         sender: senderAddress,
         contract: XION.contracts.milestoneChecker,
-        msg: btoa(JSON.stringify(executeMsg)) as unknown as Uint8Array,
+        msg: Array.from(toUtf8(JSON.stringify(executeMsg))) as unknown as Uint8Array,
         funds: [],
       },
     };
@@ -486,7 +493,8 @@ export async function txCheckAndRelease({
       typeUrl: msgExecuteContract.typeUrl,
       valueType: typeof msgExecuteContract.value,
       msgIsUint8Array: msgExecuteContract.value?.msg instanceof Uint8Array,
-      msgJsonPreview: msg,
+      msgIsArray: Array.isArray(msgExecuteContract.value?.msg),
+      msgJsonPreview: executeMsg,
     });
 
     const executePromise = signingClient.signAndBroadcast(
