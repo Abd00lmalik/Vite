@@ -242,11 +242,22 @@ export async function txSubmitBatch({
 
   try {
 
-    // Add a 60s timeout to prevent UI hanging indefinitely
-    const executePromise = signingClient.execute(
+    // Create raw CosmWasm execute message because direct signing clients
+    // (PopupSigningClient, RedirectSigningClient) do NOT implement `.execute()`,
+    // they only implement `.signAndBroadcast()`.
+    const msgExecuteContract = {
+      typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
+      value: {
+        sender: senderAddress,
+        contract: XION.contracts.vaccinationRecord,
+        msg: new TextEncoder().encode(JSON.stringify(msg)),
+        funds: [],
+      },
+    };
+
+    const executePromise = signingClient.signAndBroadcast(
       senderAddress,
-      XION.contracts.vaccinationRecord,
-      msg,
+      [msgExecuteContract],
       'auto'
     );
 
@@ -422,10 +433,22 @@ export async function txCheckAndRelease({
 
   try {
 
-    const executePromise = signingClient.execute(
+    // Create raw CosmWasm execute message because direct signing clients
+    // (PopupSigningClient, RedirectSigningClient) do NOT implement `.execute()`,
+    // they only implement `.signAndBroadcast()`.
+    const msgExecuteContract = {
+      typeUrl: "/cosmwasm.wasm.v1.MsgExecuteContract",
+      value: {
+        sender: senderAddress,
+        contract: XION.contracts.milestoneChecker,
+        msg: new TextEncoder().encode(JSON.stringify(msg)),
+        funds: [],
+      },
+    };
+
+    const executePromise = signingClient.signAndBroadcast(
       senderAddress,
-      XION.contracts.milestoneChecker,
-      msg,
+      [msgExecuteContract],
       'auto'
     );
 

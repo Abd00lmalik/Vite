@@ -598,6 +598,16 @@ export async function runSync(
       });
     }
 
+    if (typeof (signingClient as any).signAndBroadcast !== "function") {
+      return failureResult({
+        batchId: 'client-invalid',
+        recordCount: scopedVaccinations.length,
+        merkleRoot: '0x0',
+        mode: 'onchain',
+        errors: ['XION signing client is not ready or does not support signing. Reconnect XION and authorize signing.'],
+      });
+    }
+
     onProgress?.({ step: 2, message: 'Checking wallet status on XION...' });
     try {
       const accountPreflight = await runSyncPreflight(senderAddress);
