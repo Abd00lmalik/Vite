@@ -1,5 +1,5 @@
 import { ExecuteResult } from "@cosmjs/cosmwasm-stargate";
-import { XION } from "./config";
+import { XION, SHOW_XION_DEBUG } from "./config";
 
 export type ExecuteArgs = {
   contractAddress: string;
@@ -69,7 +69,9 @@ export function getXionSubmitter(signingClient: any): XionSubmitter {
   }
 
   const audit = auditClient(signingClient);
-  console.log("[XION SDK AUDIT]", audit);
+  if (SHOW_XION_DEBUG) {
+    console.log("[XION SDK AUDIT]", audit);
+  }
 
   // ── Path 1: Session execute (GranteeSignerClient) ───────────────────────
   // Has .execute() → GranteeSignerClient or AAClient.
@@ -104,7 +106,9 @@ export function getXionSubmitter(signingClient: any): XionSubmitter {
         requiredAction: "none",
       },
       execute: async ({ contractAddress, msg, senderAddress }) => {
-        console.log("[XION SUBMIT] Session .execute()", { senderAddress, contractAddress });
+        if (SHOW_XION_DEBUG) {
+          console.log("[XION SUBMIT] Session .execute()", { senderAddress, contractAddress });
+        }
         return await signingClient.execute(senderAddress, contractAddress, msg, "auto");
       },
     };
@@ -125,7 +129,9 @@ export function getXionSubmitter(signingClient: any): XionSubmitter {
         requiredAction: "none — user approves each transaction in popup",
       },
       execute: async ({ contractAddress, msg, senderAddress }) => {
-        console.log("[XION SUBMIT] Popup .signAndBroadcast()", { senderAddress, contractAddress });
+        if (SHOW_XION_DEBUG) {
+          console.log("[XION SUBMIT] Popup .signAndBroadcast()", { senderAddress, contractAddress });
+        }
 
         const { toUtf8 } = await import("@cosmjs/encoding");
 
@@ -162,7 +168,9 @@ export function getXionSubmitter(signingClient: any): XionSubmitter {
         requiredAction: "none — testnet fallback",
       },
       execute: async ({ contractAddress, msg, senderAddress }) => {
-        console.warn("[XION SUBMIT] Server testnet fallback", { senderAddress, contractAddress });
+        if (SHOW_XION_DEBUG) {
+          console.warn("[XION SUBMIT] Server testnet fallback", { senderAddress, contractAddress });
+        }
         const response = await fetch("/api/xion/submit-batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

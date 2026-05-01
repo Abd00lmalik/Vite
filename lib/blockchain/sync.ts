@@ -1,8 +1,8 @@
-import { v4 as uuidv4 } from 'uuid';
-import { buildMerkleTree } from '@/lib/utils/merkle';
-import { db } from '@/lib/db/schema';
-import { XION, explorerTxUrl, XION_RUNTIME } from '@/lib/xion/config';
-import { txCheckAndRelease, txSubmitBatch } from '@/lib/xion/contracts';
+import { v4 as uuidv4 } from "uuid";
+import { buildMerkleTree } from "@/lib/utils/merkle";
+import { db } from "@/lib/db/schema";
+import { XION, explorerTxUrl, XION_RUNTIME, SHOW_XION_DEBUG } from "@/lib/xion/config";
+import { txCheckAndRelease, txSubmitBatch } from "@/lib/xion/contracts";
 import {
   ensureSyncQueueEntry,
   getPendingPatients,
@@ -11,27 +11,35 @@ import {
   markPatientSynced,
   markSyncQueueSynced,
   markVaccinationSynced,
-} from '@/lib/db/db';
-import { migrateAndCleanSyncQueue, sanitizeSyncQueue } from '@/lib/db/syncQueueSanitizer';
-import { SMS } from '@/lib/notifications/sms';
-import { scheduleReminder } from '@/lib/notifications/reminders';
-import { INITIAL_VACCINE_LOTS } from '@/lib/seed/initialData';
-import { isDemoSession } from '@/lib/auth/demo';
+} from "@/lib/db/db";
+import {
+  migrateAndCleanSyncQueue,
+  sanitizeSyncQueue,
+} from "@/lib/db/syncQueueSanitizer";
+import { SMS } from "@/lib/notifications/sms";
+import { scheduleReminder } from "@/lib/notifications/reminders";
+import { INITIAL_VACCINE_LOTS } from "@/lib/seed/initialData";
+import { isDemoSession } from "@/lib/auth/demo";
 import {
   formatAccountNotInitializedMessage,
   runSyncPreflight,
   requiredSyncGasUxion,
-} from '@/lib/xion/preflight';
-import { formatContractFailure, validateRequiredContracts, isSyncConfigured, getMissingXionVars } from '@/lib/xion/readiness';
+} from "@/lib/xion/preflight";
+import {
+  formatContractFailure,
+  validateRequiredContracts,
+  isSyncConfigured,
+  getMissingXionVars,
+} from "@/lib/xion/readiness";
 import {
   classifyAddress,
   extractAddressFields,
   formatAddressError,
   type AddressClassificationContext,
   type XionAddressRole,
-} from '@/lib/xion/addressTypes';
-import { traceXionAddressesInSync } from '@/lib/xion/traceAddresses';
-import type { Patient, SyncResult, VaccinationRecord } from '@/types';
+} from "@/lib/xion/addressTypes";
+import { traceXionAddressesInSync } from "@/lib/xion/traceAddresses";
+import type { Patient, SyncResult, VaccinationRecord } from "@/types";
 
 export interface SyncProgressUpdate {
   step: 1 | 2 | 3 | 4 | 5;
@@ -47,17 +55,17 @@ interface SyncAddressValidationResult {
 }
 
 function mockTxHash(seed: string): string {
-  const raw = `${seed.replace(/[^a-zA-Z0-9]/g, '')}${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
-  return `0x${raw.padEnd(64, 'a').slice(0, 64)}`;
+  const raw = `${seed.replace(/[^a-zA-Z0-9]/g, "")}${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+  return `0x${raw.padEnd(64, "a").slice(0, 64)}`;
 }
 
 function normalizeErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
-  if (typeof error === 'string') return error;
+  if (typeof error === "string") return error;
   return JSON.stringify(error);
 }
 
-type SyncErrorStage = 'preflight' | 'submit' | 'milestone' | 'unknown';
+type SyncErrorStage = "preflight" | "submit" | "milestone" | "unknown";
 
 function isLikelyXionAddress(value?: string | null): boolean {
   if (!value) return false;
@@ -73,46 +81,56 @@ function classifySyncError(
     stage?: SyncErrorStage;
     role?: XionAddressRole;
     classifyContext?: AddressClassificationContext;
-  } = {}
+  } = {},
 ): string {
-  if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true') {
-    console.error(`[SYNC CLASSIFY ERROR] Stage: ${context.stage}, Raw:`, rawError);
+  if (
+    process.env.NODE_ENV === "development" ||
+    process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === "true"
+  ) {
+    if (SHOW_XION_DEBUG) {
+      console.error(
+        `[SYNC CLASSIFY ERROR] Stage: ${context.stage}, Raw:`,
+        rawError,
+      );
+    }
   }
   const message = rawError.toLowerCase();
 
-  if (message.includes('timeout')) {
-    if (message.includes('signing session')) {
-      return 'Signing session timed out. Please reconnect your wallet.';
+  if (message.includes("timeout")) {
+    if (message.includes("signing session")) {
+      return "Signing session timed out. Please reconnect your wallet.";
     }
-    return 'XION transaction execution timed out (60s). The transaction may still be processing on-chain.';
+    return "XION transaction execution timed out (60s). The transaction may still be processing on-chain.";
   }
 
   if (
-    message.includes('failed to fetch') ||
-    message.includes('networkerror') ||
-    message.includes('network request failed') ||
-    message.includes('econn')
+    message.includes("failed to fetch") ||
+    message.includes("networkerror") ||
+    message.includes("network request failed") ||
+    message.includes("econn")
   ) {
-    return 'Could not reach XION network. Check your connection.';
+    return "Could not reach XION network. Check your connection.";
   }
 
-  if (message.includes('account') && message.includes('not found')) {
+  if (message.includes("account") && message.includes("not found")) {
     const addressMatch = rawError.match(/account\s+(xion1[0-9a-z]+)/i);
     const parsedAddress = addressMatch?.[1];
 
     // CRITICAL: Always log the raw error so we can debug which account is actually missing
-    console.error('[SYNC ERROR CLASSIFY] "account not found" detected', {
-      stage: context.stage,
-      parsedAddress,
-      senderAddress: context.address,
-      rawError,
-    });
+    if (SHOW_XION_DEBUG) {
+      console.error('[SYNC ERROR CLASSIFY] "account not found" detected', {
+        stage: context.stage,
+        parsedAddress,
+        senderAddress: context.address,
+        rawError,
+      });
+    }
 
     // If we're in the submit or milestone stage, this is almost certainly a
     // signer/session account issue — NOT a patient identity issue.
     // The Abstraxion grantee session key may not have grants or may not be
     // initialized on-chain, which produces this exact error.
-    if (context.stage === 'submit' || context.stage === 'milestone') {
+    if (context.stage === "submit" || context.stage === "milestone") {
       if (parsedAddress) {
         // Check if the missing account is the sender we passed to execute()
         if (parsedAddress === context.address) {
@@ -127,24 +145,29 @@ function classifySyncError(
     }
 
     // For preflight stage
-    if (context.stage === 'preflight') {
+    if (context.stage === "preflight") {
       return formatAccountNotInitializedMessage(context.address);
     }
 
     // For other stages, use the classifier but ALWAYS append raw error
     if (parsedAddress) {
-      const resolvedRole = context.classifyContext != null
+      const resolvedRole =
+        context.classifyContext != null
           ? classifyAddress(parsedAddress, context.classifyContext).role
-          : context.role ?? 'unknown';
+          : (context.role ?? "unknown");
 
-      if (resolvedRole === 'contract') {
-        const source = (parsedAddress === context.address && context.role === 'contract')
-          ? 'env_config'
-          : 'generated'; 
+      if (resolvedRole === "contract") {
+        const source =
+          parsedAddress === context.address && context.role === "contract"
+            ? "env_config"
+            : "generated";
         return formatSyncContractError(parsedAddress, source);
       }
       // For any other role, show the address and raw error without misleading classification
-      return formatAddressError(parsedAddress, resolvedRole, rawError) + ` (Raw: ${rawError})`;
+      return (
+        formatAddressError(parsedAddress, resolvedRole, rawError) +
+        ` (Raw: ${rawError})`
+      );
     }
     if (context.contractName) {
       return `${context.contractName} contract was not found on-chain. Verify the contract address in your environment configuration.`;
@@ -155,43 +178,57 @@ function classifySyncError(
     return `An account required for sync was not found on-chain. ${rawError}`;
   }
 
-  if (message.includes('unauthorized')) {
-    return 'Sync was rejected by the contract. Your wallet may not be registered as an authorized issuer.';
-  }
-
-  if (message.includes('does not allow to pay fees') || message.includes('fee-grant not found')) {
-    return 'XION fee grant missing or session not authorized. Reconnect your wallet or approve the transaction to pay gas fees.';
+  if (message.includes("unauthorized")) {
+    return "Sync was rejected by the contract. Your wallet may not be registered as an authorized issuer.";
   }
 
   if (
-    message.includes('insufficient') &&
-    (message.includes('uxion') || message.includes('gas') || message.includes('fee') || message.includes('fund'))
+    message.includes("does not allow to pay fees") ||
+    message.includes("fee-grant not found")
   ) {
-    return 'Insufficient UXION balance for gas fees.';
+    return "XION fee grant missing or session not authorized. Reconnect your wallet or approve the transaction to pay gas fees.";
   }
 
-  if (message.includes('execute wasm contract failed')) {
+  if (
+    message.includes("insufficient") &&
+    (message.includes("uxion") ||
+      message.includes("gas") ||
+      message.includes("fee") ||
+      message.includes("fund"))
+  ) {
+    return "Insufficient UXION balance for gas fees.";
+  }
+
+  if (message.includes("execute wasm contract failed")) {
     return `Contract execution failed: ${rawError}`;
   }
 
-  if (message.includes('rpc error') || message.includes('contract')) {
+  if (message.includes("rpc error") || message.includes("contract")) {
     return `Contract error: ${rawError}`;
   }
 
   return `Sync failed: ${rawError}`;
 }
 
-function formatSyncContractError(address: string, source: 'env_config' | 'queue_record' | 'generated' | 'argument_error' | 'unknown'): string {
+function formatSyncContractError(
+  address: string,
+  source:
+    | "env_config"
+    | "queue_record"
+    | "generated"
+    | "argument_error"
+    | "unknown",
+): string {
   switch (source) {
-    case 'env_config':
+    case "env_config":
       return `The configured contract address (${address}) was not found on XION Testnet-2. Verify the contract is deployed and the Vercel environment variable is correct.`;
-    case 'queue_record':
+    case "queue_record":
       return `A pending sync record contained a stale contract-like address (${address}). This record has been quarantined. Re-record the vaccination to create a clean entry.`;
-    case 'generated':
+    case "generated":
       return `An internally generated address (${address}) was incorrectly treated as a contract target. This is a code bug — report it.`;
-    case 'argument_error':
+    case "argument_error":
       return `A sync call passed the wrong address (${address}) as the contract target. This is a code bug — the patient or wallet address was used where the contract address should be.`;
-    case 'unknown':
+    case "unknown":
       return `Sync encountered an unexpected address (${address}). Enable sync diagnostics and check the browser console for address provenance.`;
   }
 }
@@ -206,19 +243,21 @@ function mapSyncError(
     role?: XionAddressRole;
     classifyContext?: AddressClassificationContext;
     msg?: any; // Added to capture message
-  } = {}
+  } = {},
 ): string {
   const raw = normalizeErrorMessage(error);
-  
+
   // Step 6: Log raw error details
-  console.error("[RAW XION EXECUTE ERROR]", {
-    stage: context.stage,
-    senderAddress: context.senderAddress,
-    contractAddress: context.address,
-    msg: context.msg,
-    rawError: error,
-    rawErrorMessage: raw,
-  });
+  if (SHOW_XION_DEBUG) {
+    console.error("[RAW XION EXECUTE ERROR]", {
+      stage: context.stage,
+      senderAddress: context.senderAddress,
+      contractAddress: context.address,
+      msg: context.msg,
+      rawError: error,
+      rawErrorMessage: raw,
+    });
+  }
 
   return classifySyncError(raw, {
     contractName: context.contractName,
@@ -230,7 +269,7 @@ function mapSyncError(
 }
 
 function resolveVaccinationOwner(
-  record: Pick<VaccinationRecord, 'ownerUserId' | 'administeredBy'>
+  record: Pick<VaccinationRecord, "ownerUserId" | "administeredBy">,
 ): string {
   return record.ownerUserId ?? record.administeredBy;
 }
@@ -240,7 +279,9 @@ interface PatientPayoutResolution {
   source: string;
 }
 
-async function resolvePatientPayoutAddress(patient: Patient): Promise<PatientPayoutResolution> {
+async function resolvePatientPayoutAddress(
+  patient: Patient,
+): Promise<PatientPayoutResolution> {
   if (!patient.userId) {
     return {
       address: null,
@@ -274,14 +315,17 @@ function resolveRecordOwner(record: VaccinationRecord): string {
   return record.ownerUserId ?? record.administeredBy;
 }
 
-function resolveQueueOwner(userId?: string, ownerUserId?: string): string | undefined {
+function resolveQueueOwner(
+  userId?: string,
+  ownerUserId?: string,
+): string | undefined {
   return ownerUserId ?? userId;
 }
 
 function buildAddressClassificationContext(
   connectedWallet: string,
   contracts: typeof XION.contracts,
-  isDemoRecord: boolean
+  isDemoRecord: boolean,
 ): AddressClassificationContext {
   return {
     connectedWallet,
@@ -297,7 +341,7 @@ async function validateSyncAddresses(
   connectedWallet: string,
   contracts: typeof XION.contracts,
   currentUserId: string,
-  isDemoMode: boolean
+  isDemoMode: boolean,
 ): Promise<SyncAddressValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -306,45 +350,54 @@ async function validateSyncAddresses(
   const classificationContext = buildAddressClassificationContext(
     connectedWallet,
     contracts,
-    isDemoMode
+    isDemoMode,
   );
 
   if (!isDemoMode) {
     if (!isSyncConfigured()) {
-      errors.push('XION configuration is incomplete.');
+      errors.push("XION configuration is incomplete.");
     }
   }
 
   for (const queueItem of pendingQueue) {
-    const queueOwner = resolveQueueOwner(queueItem.userId, queueItem.ownerUserId);
+    const queueOwner = resolveQueueOwner(
+      queueItem.userId,
+      queueItem.ownerUserId,
+    );
     if (queueOwner !== currentUserId) {
       quarantinedRecordIds.push(queueItem.recordId);
-      warnings.push(`Record ${queueItem.recordId} belongs to a different account and was excluded from sync.`);
+      warnings.push(
+        `Record ${queueItem.recordId} belongs to a different account and was excluded from sync.`,
+      );
       continue;
     }
 
     if (!isDemoMode && queueItem.isDemo) {
       quarantinedRecordIds.push(queueItem.recordId);
-      warnings.push(`Record ${queueItem.recordId} is demo data and was excluded from real sync.`);
+      warnings.push(
+        `Record ${queueItem.recordId} is demo data and was excluded from real sync.`,
+      );
       continue;
     }
 
-    const addressFields = extractAddressFields(queueItem, 'queueItem');
+    const addressFields = extractAddressFields(queueItem, "queueItem");
     for (const { field, address } of addressFields) {
       const classified = classifyAddress(address, {
         ...classificationContext,
         isDemoRecord: Boolean(queueItem.isDemo),
       });
 
-      if (classified.role === 'demo') {
+      if (classified.role === "demo") {
         quarantinedRecordIds.push(queueItem.recordId);
-        warnings.push(`Record ${queueItem.recordId} contains a demo address in "${field}" and was excluded.`);
+        warnings.push(
+          `Record ${queueItem.recordId} contains a demo address in "${field}" and was excluded.`,
+        );
         continue;
       }
 
-      if (classified.role === 'unknown') {
+      if (classified.role === "unknown") {
         warnings.push(
-          `Record ${queueItem.recordId} contains an unrecognized address in "${field}". It is treated as an identity reference and not queried on-chain.`
+          `Record ${queueItem.recordId} contains an unrecognized address in "${field}". It is treated as an identity reference and not queried on-chain.`,
         );
       }
     }
@@ -386,7 +439,7 @@ function failureResult({
   txHash?: string;
   grantsReleased?: number;
   flaggedCount?: number;
-  mode: 'onchain' | 'simulated';
+  mode: "onchain" | "simulated";
   errors: string[];
   warnings?: string[];
   blockHeight?: number;
@@ -427,7 +480,7 @@ export async function runSync(
   session: { userId: string; role: string; clinicId?: string; demo?: boolean },
   signingClient: any,
   senderAddress: string,
-  onProgress?: (update: SyncProgressUpdate) => void
+  onProgress?: (update: SyncProgressUpdate) => void,
 ): Promise<SyncResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -435,81 +488,101 @@ export async function runSync(
   let flaggedCount = 0;
 
   const clinicId = session.clinicId ?? `clinic-${session.userId.slice(0, 6)}`;
-  const demoAccount = Boolean(session.demo) || isDemoSession({ userId: session.userId } as any);
+  const demoAccount =
+    Boolean(session.demo) || isDemoSession({ userId: session.userId } as any);
   const onChain = !demoAccount;
-  const addressContext = buildAddressClassificationContext(senderAddress, XION.contracts, demoAccount);
+  const addressContext = buildAddressClassificationContext(
+    senderAddress,
+    XION.contracts,
+    demoAccount,
+  );
   // ── Diagnostic: log every contract address used at execution time ──────────
   // Visible in browser DevTools console. When NEXT_PUBLIC_SHOW_XION_DEBUG=true
   // these values are also shown in the SyncPanel debug block.
   const contractAddressSource = {
     vaccinationRecord: {
-      value: XION.contracts.vaccinationRecord || '(empty)',
-      source: 'env:NEXT_PUBLIC_XION_VACCINATION_RECORD',
+      value: XION.contracts.vaccinationRecord || "(empty)",
+      source: "env:NEXT_PUBLIC_XION_VACCINATION_RECORD",
     },
     milestoneChecker: {
-      value: XION.contracts.milestoneChecker || '(empty)',
-      source: 'env:NEXT_PUBLIC_XION_MILESTONE_CHECKER',
+      value: XION.contracts.milestoneChecker || "(empty)",
+      source: "env:NEXT_PUBLIC_XION_MILESTONE_CHECKER",
     },
     issuerRegistry: {
-      value: XION.contracts.issuerRegistry || '(empty)',
-      source: 'env:NEXT_PUBLIC_XION_ISSUER_REGISTRY',
+      value: XION.contracts.issuerRegistry || "(empty)",
+      source: "env:NEXT_PUBLIC_XION_ISSUER_REGISTRY",
     },
     grantEscrow: {
-      value: XION.contracts.grantEscrow || '(empty)',
-      source: 'env:NEXT_PUBLIC_XION_GRANT_ESCROW',
+      value: XION.contracts.grantEscrow || "(empty)",
+      source: "env:NEXT_PUBLIC_XION_GRANT_ESCROW",
     },
   };
-  console.log('[Sync] Contract addresses at execution time:', JSON.stringify(contractAddressSource, null, 2));
+  if (SHOW_XION_DEBUG) {
+    console.log(
+      "[Sync] Contract addresses at execution time:",
+      JSON.stringify(contractAddressSource, null, 2),
+    );
+  }
 
   // ── Migration: strip any stale contract fields from stored records ─────────
   // Must run before sanitizeSyncQueue so suspicious records are quarantined with
   // the correct reason rather than masked by the demo/ownership check.
   const migrationResult = await migrateAndCleanSyncQueue(session.userId);
-  if (migrationResult.cleanedCount > 0 || migrationResult.quarantinedCount > 0) {
-    console.warn('[Sync] migrateAndCleanSyncQueue:', migrationResult);
+  if (
+    migrationResult.cleanedCount > 0 ||
+    migrationResult.quarantinedCount > 0
+  ) {
+    if (SHOW_XION_DEBUG) {
+      console.warn("[Sync] migrateAndCleanSyncQueue:", migrationResult);
+    }
   }
 
-  const sanitizeResult = await sanitizeSyncQueue(session.userId, { isDemoUser: demoAccount });
+  const sanitizeResult = await sanitizeSyncQueue(session.userId, {
+    isDemoUser: demoAccount,
+  });
   if (sanitizeResult.quarantinedCount > 0) {
     errors.push(
-      `One or more pending records contain stale data from a previous session and have been removed from the sync queue (${sanitizeResult.quarantinedCount} quarantined).`
+      `One or more pending records contain stale data from a previous session and have been removed from the sync queue (${sanitizeResult.quarantinedCount} quarantined).`,
     );
   }
 
-  onProgress?.({ step: 1, message: 'Gathering pending records...' });
-  const [pendingQueue, pendingVaccinationsAll, pendingPatients] = await Promise.all([
-    getPendingSyncQueueForUser(session.userId),
-    getPendingVaccinations({ ownerUserId: session.userId }),
-    getPendingPatients({ ownerUserId: session.userId }),
-  ]);
+  onProgress?.({ step: 1, message: "Gathering pending records..." });
+  const [pendingQueue, pendingVaccinationsAll, pendingPatients] =
+    await Promise.all([
+      getPendingSyncQueueForUser(session.userId),
+      getPendingVaccinations({ ownerUserId: session.userId }),
+      getPendingPatients({ ownerUserId: session.userId }),
+    ]);
 
   traceXionAddressesInSync({
     config: XION.contracts,
     connectedWallet: senderAddress,
     pendingRecords: pendingQueue,
-    label: 'runSync',
+    label: "runSync",
   });
 
   const queuedVaccinationIds = new Set(
     pendingQueue
-      .filter((item) => item.type === 'vaccination')
-      .map((item) => item.recordId)
+      .filter((item) => item.type === "vaccination")
+      .map((item) => item.recordId),
   );
 
   if (pendingVaccinationsAll.length > 0) {
-    const missingQueueEntries = pendingVaccinationsAll.filter((record) => !queuedVaccinationIds.has(record.id));
+    const missingQueueEntries = pendingVaccinationsAll.filter(
+      (record) => !queuedVaccinationIds.has(record.id),
+    );
     if (missingQueueEntries.length > 0) {
       await Promise.all(
         missingQueueEntries.map((record) =>
           ensureSyncQueueEntry({
-            type: 'vaccination',
+            type: "vaccination",
             recordId: record.id,
             ownerUserId: session.userId,
             clinicId: record.clinicId,
             patientId: record.patientId,
             data: record,
-          })
-        )
+          }),
+        ),
       );
       for (const record of missingQueueEntries) {
         queuedVaccinationIds.add(record.id);
@@ -519,7 +592,9 @@ export async function runSync(
 
   const pendingVaccinations =
     queuedVaccinationIds.size > 0
-      ? pendingVaccinationsAll.filter((record) => queuedVaccinationIds.has(record.id))
+      ? pendingVaccinationsAll.filter((record) =>
+          queuedVaccinationIds.has(record.id),
+        )
       : pendingVaccinationsAll;
 
   const addressValidation = await validateSyncAddresses(
@@ -528,19 +603,21 @@ export async function runSync(
     senderAddress,
     XION.contracts,
     session.userId,
-    demoAccount
+    demoAccount,
   );
 
   if (addressValidation.quarantinedRecordIds.length > 0) {
     const staleQueueIds = new Set(addressValidation.quarantinedRecordIds);
-    const staleQueueItems = pendingQueue.filter((item) => staleQueueIds.has(item.recordId));
+    const staleQueueItems = pendingQueue.filter((item) =>
+      staleQueueIds.has(item.recordId),
+    );
     await Promise.all(
       staleQueueItems.map((item) =>
         db.syncQueue.update(item.id, {
-          status: 'failed',
-          error: 'quarantined: stale data from previous session',
-        })
-      )
+          status: "failed",
+          error: "quarantined: stale data from previous session",
+        }),
+      ),
     );
   }
 
@@ -550,10 +627,10 @@ export async function runSync(
 
   if (!addressValidation.valid) {
     return failureResult({
-      batchId: 'address-validation-failed',
+      batchId: "address-validation-failed",
       recordCount: addressValidation.safeRecords.length,
-      merkleRoot: '0x0',
-      mode: onChain ? 'onchain' : 'simulated',
+      merkleRoot: "0x0",
+      mode: onChain ? "onchain" : "simulated",
       errors: [...errors, ...addressValidation.errors],
     });
   }
@@ -563,16 +640,16 @@ export async function runSync(
   if (scopedVaccinations.length === 0 && pendingPatients.length === 0) {
     return {
       success: true,
-      batchId: 'no-op',
+      batchId: "no-op",
       recordCount: 0,
-      merkleRoot: '0x0',
+      merkleRoot: "0x0",
       grantsReleased: 0,
       errors,
       warnings,
       phaseA: { success: true },
       phaseB: { success: true, skipped: false, warnings: [] },
       flaggedCount: 0,
-      mode: onChain ? 'onchain' : 'simulated',
+      mode: onChain ? "onchain" : "simulated",
     };
   }
 
@@ -580,60 +657,65 @@ export async function runSync(
     if (!isSyncConfigured()) {
       const missing = getMissingXionVars();
       return failureResult({
-        batchId: 'config-missing',
+        batchId: "config-missing",
         recordCount: scopedVaccinations.length,
-        merkleRoot: '0x0',
-        mode: 'onchain',
-        errors: [`XION configuration is incomplete. Missing: ${missing.join(', ')}`],
+        merkleRoot: "0x0",
+        mode: "onchain",
+        errors: [
+          `XION configuration is incomplete. Missing: ${missing.join(", ")}`,
+        ],
       });
     }
 
     if (!signingClient || !senderAddress) {
       return failureResult({
-        batchId: 'wallet-disconnected',
+        batchId: "wallet-disconnected",
         recordCount: scopedVaccinations.length,
-        merkleRoot: '0x0',
-        mode: 'onchain',
-        errors: ['Wallet is not connected. Connect your XION account before syncing.'],
-      });
-    }
-
-    const hasExecute = typeof (signingClient as any).execute === "function";
-    const hasSignAndBroadcast = typeof (signingClient as any).signAndBroadcast === "function";
-    if (!hasExecute && !hasSignAndBroadcast) {
-      return failureResult({
-        batchId: 'client-invalid',
-        recordCount: scopedVaccinations.length,
-        merkleRoot: '0x0',
-        mode: 'onchain',
+        merkleRoot: "0x0",
+        mode: "onchain",
         errors: [
-          `XION signing client (${(signingClient as any)?.constructor?.name ?? 'unknown'}) ` +
-          `has neither .execute() nor .signAndBroadcast(). ` +
-          `This usually means session grants were not approved. ` +
-          `Disconnect and reconnect your XION wallet to approve contract grants.`
+          "Wallet is not connected. Connect your XION account before syncing.",
         ],
       });
     }
 
-    onProgress?.({ step: 2, message: 'Checking wallet status on XION...' });
+    const hasExecute = typeof (signingClient as any).execute === "function";
+    const hasSignAndBroadcast =
+      typeof (signingClient as any).signAndBroadcast === "function";
+    if (!hasExecute && !hasSignAndBroadcast) {
+      return failureResult({
+        batchId: "client-invalid",
+        recordCount: scopedVaccinations.length,
+        merkleRoot: "0x0",
+        mode: "onchain",
+        errors: [
+          `XION signing client (${(signingClient as any)?.constructor?.name ?? "unknown"}) ` +
+            `has neither .execute() nor .signAndBroadcast(). ` +
+            `This usually means session grants were not approved. ` +
+            `Disconnect and reconnect your XION wallet to approve contract grants.`,
+        ],
+      });
+    }
+
+    onProgress?.({ step: 2, message: "Checking wallet status on XION..." });
     try {
       const accountPreflight = await runSyncPreflight(senderAddress);
       if (!accountPreflight.accountExists) {
         return failureResult({
-          batchId: 'account-not-found',
+          batchId: "account-not-found",
           recordCount: scopedVaccinations.length,
-          merkleRoot: '0x0',
-          mode: 'onchain',
+          merkleRoot: "0x0",
+          mode: "onchain",
           errors: [formatAccountNotInitializedMessage(senderAddress)],
         });
       }
 
       if (!accountPreflight.hasMinimumBalance) {
         return failureResult({
-          batchId: 'insufficient-gas',
+          batchId: "insufficient-gas",
           recordCount: scopedVaccinations.length,
-          merkleRoot: '0x0',
-          mode: 'onchain',
+          merkleRoot: "0x0",
+          mode: "onchain",
           errors: [
             `Insufficient UXION balance for gas fees. Minimum required: ${requiredSyncGasUxion().toString()} uxion. Current: ${accountPreflight.balanceAmount.toString()} uxion.`,
           ],
@@ -641,15 +723,15 @@ export async function runSync(
       }
     } catch (error) {
       return failureResult({
-        batchId: 'preflight-failed',
+        batchId: "preflight-failed",
         recordCount: scopedVaccinations.length,
-        merkleRoot: '0x0',
-        mode: 'onchain',
+        merkleRoot: "0x0",
+        mode: "onchain",
         errors: [
           mapSyncError(error, {
             senderAddress,
-            stage: 'preflight',
-            role: 'connected_wallet',
+            stage: "preflight",
+            role: "connected_wallet",
             classifyContext: addressContext,
           }),
         ],
@@ -660,10 +742,10 @@ export async function runSync(
 
     if (!contractValidation.valid) {
       return failureResult({
-        batchId: 'contract-validation-failed',
+        batchId: "contract-validation-failed",
         recordCount: scopedVaccinations.length,
-        merkleRoot: '0x0',
-        mode: 'onchain',
+        merkleRoot: "0x0",
+        mode: "onchain",
         errors: contractValidation.failures.map(formatContractFailure),
       });
     }
@@ -674,7 +756,9 @@ export async function runSync(
     const isKnownLot = lotRegistry.has(record.lotNumber);
     if (!isKnownLot) {
       flaggedCount += 1;
-      errors.push(`Unknown lot number flagged: ${record.lotNumber} (${record.id})`);
+      errors.push(
+        `Unknown lot number flagged: ${record.lotNumber} (${record.id})`,
+      );
     }
     return isKnownLot;
   });
@@ -682,20 +766,20 @@ export async function runSync(
   if (validVaccinations.length === 0) {
     return {
       success: false,
-      batchId: 'all-flagged',
+      batchId: "all-flagged",
       recordCount: 0,
-      merkleRoot: '0x0',
+      merkleRoot: "0x0",
       grantsReleased: 0,
       errors,
       warnings,
       phaseA: { success: false },
       phaseB: { success: true, skipped: true, warnings: [] },
       flaggedCount,
-      mode: onChain ? 'onchain' : 'simulated',
+      mode: onChain ? "onchain" : "simulated",
     };
   }
 
-  onProgress?.({ step: 3, message: 'Building cryptographic proof...' });
+  onProgress?.({ step: 3, message: "Building cryptographic proof..." });
 
   // 2. Apply it to EVERY record before Merkle build
   const finalizedVaccinations = validVaccinations.map((r) => ({
@@ -704,10 +788,15 @@ export async function runSync(
   }));
 
   const { root } = buildMerkleTree(finalizedVaccinations);
-  console.log('[SyncTrace] Merkle tree built. Root:', root);
+  if (SHOW_XION_DEBUG) {
+    console.log("[SyncTrace] Merkle tree built. Root:", root);
+  }
   const batchId = uuidv4();
 
-  onProgress?.({ step: 4, message: onChain ? 'Broadcasting to XION...' : 'Running demo sync...' });
+  onProgress?.({
+    step: 4,
+    message: onChain ? "Broadcasting to XION..." : "Running demo sync...",
+  });
 
   let txHash = mockTxHash(batchId);
   let explorerUrl: string | undefined;
@@ -716,34 +805,50 @@ export async function runSync(
   if (onChain) {
     try {
       // ── TRACE: Ground truth contract address audit ─────────────────────────
-      console.log('[SyncTrace] Executing txSubmitBatch');
-      console.log('[SyncTrace] Address used:', XION.contracts.vaccinationRecord);
-      console.log('[SyncTrace] JS Source: XION.contracts.vaccinationRecord (lib/xion/config.ts)');
+      if (SHOW_XION_DEBUG) {
+        console.log("[SyncTrace] Executing txSubmitBatch");
+        console.log(
+          "[SyncTrace] Address used:",
+          XION.contracts.vaccinationRecord,
+        );
+        console.log(
+          "[SyncTrace] JS Source: XION.contracts.vaccinationRecord (lib/xion/config.ts)",
+        );
+      }
 
       // 3. Add HARD ASSERTION (fail fast)
       for (const r of finalizedVaccinations) {
         if (r.patientId.startsWith("xion1")) {
           throw new Error(
-            `[FATAL] patient_id leaked into payload: ${r.patientId}`
+            `[FATAL] patient_id leaked into payload: ${r.patientId}`,
           );
         }
       }
 
       // 4. Add debug log (must show sanitized output)
-      console.log("[FINAL PAYLOAD CHECK]", finalizedVaccinations.map(r => ({
-        patient_id: r.patientId,
-      })));
+      if (SHOW_XION_DEBUG) {
+        console.log(
+          "[FINAL PAYLOAD CHECK]",
+          finalizedVaccinations.map((r) => ({
+            patient_id: r.patientId,
+          })),
+        );
+      }
 
-      console.log('[SyncTrace] Attempting txSubmitBatch...');
+      if (SHOW_XION_DEBUG) {
+        console.log("[SyncTrace] Attempting txSubmitBatch...");
+      }
       const tx = await txSubmitBatch({
         signingClient,
         senderAddress,
         batchId,
         merkleRoot: root,
         recordCount: finalizedVaccinations.length,
-        clinicId
+        clinicId,
       });
-      console.log('[SyncTrace] txSubmitBatch returned result:', tx);
+      if (SHOW_XION_DEBUG) {
+        console.log("[SyncTrace] txSubmitBatch returned result:", tx);
+      }
       txHash = tx.txHash;
       explorerUrl = tx.explorerUrl;
       blockHeight = tx.height;
@@ -751,11 +856,11 @@ export async function runSync(
       errors.push(
         mapSyncError(error, {
           senderAddress,
-          stage: 'submit',
-          contractName: 'VaccinationRecord',
+          stage: "submit",
+          contractName: "VaccinationRecord",
           address: XION.contracts.vaccinationRecord,
           classifyContext: addressContext,
-        })
+        }),
       );
       return failureResult({
         batchId,
@@ -766,19 +871,21 @@ export async function runSync(
         errors,
         warnings,
         flaggedCount,
-        mode: 'onchain',
+        mode: "onchain",
       });
     }
   }
 
-  console.log('[SyncTrace] Marking records as synced in local DB...');
+  if (SHOW_XION_DEBUG) {
+    console.log("[SyncTrace] Marking records as synced in local DB...");
+  }
   for (const record of validVaccinations) {
     await markVaccinationSynced(record.id, txHash, blockHeight);
   }
   await markSyncQueueSynced(
     session.userId,
-    'vaccination',
-    finalizedVaccinations.map((record) => record.id)
+    "vaccination",
+    finalizedVaccinations.map((record) => record.id),
   );
 
   for (const patient of pendingPatients) {
@@ -786,17 +893,19 @@ export async function runSync(
   }
   await markSyncQueueSynced(
     session.userId,
-    'patient',
-    pendingPatients.map((patient) => patient.id)
+    "patient",
+    pendingPatients.map((patient) => patient.id),
   );
-  console.log('[SyncTrace] Local records updated.');
+  if (SHOW_XION_DEBUG) {
+    console.log("[SyncTrace] Local records updated.");
+  }
 
   await db.syncBatches.put({
     id: batchId,
     records: finalizedVaccinations,
     merkleRoot: root,
     proof: [],
-    status: onChain ? 'confirmed' : 'submitted',
+    status: onChain ? "confirmed" : "submitted",
     submittedAt: new Date().toISOString(),
     xionTxHash: txHash,
     blockHeight,
@@ -804,16 +913,23 @@ export async function runSync(
   });
 
   // Step 7: Enable/Disable milestone release via env
-  const enableMilestoneRelease = process.env.NEXT_PUBLIC_ENABLE_MILESTONE_RELEASE === 'true';
+  const enableMilestoneRelease =
+    process.env.NEXT_PUBLIC_ENABLE_MILESTONE_RELEASE === "true";
 
-  console.log("[PHASE B CONFIG]", {
-    enabled: enableMilestoneRelease,
-    envValue: process.env.NEXT_PUBLIC_ENABLE_MILESTONE_RELEASE,
-  });
+  if (SHOW_XION_DEBUG) {
+    console.log("[PHASE B CONFIG]", {
+      enabled: enableMilestoneRelease,
+      envValue: process.env.NEXT_PUBLIC_ENABLE_MILESTONE_RELEASE,
+    });
+  }
 
   if (!enableMilestoneRelease) {
-    console.log('[Sync] Milestone and grant release processing is DISABLED (Phase A only).');
-    onProgress?.({ step: 5, message: 'Sync complete (Vaccinations only).' });
+    if (SHOW_XION_DEBUG) {
+      console.log(
+        "[Sync] Milestone and grant release processing is DISABLED (Phase A only).",
+      );
+    }
+    onProgress?.({ step: 5, message: "Sync complete (Vaccinations only)." });
     return {
       success: true,
       batchId,
@@ -825,13 +941,20 @@ export async function runSync(
       errors,
       warnings,
       phaseA: { success: true },
-      phaseB: { success: true, skipped: true, warnings: ['Milestone processing disabled by configuration'] },
+      phaseB: {
+        success: true,
+        skipped: true,
+        warnings: ["Milestone processing disabled by configuration"],
+      },
       flaggedCount,
-      mode: onChain ? 'onchain' : 'simulated',
+      mode: onChain ? "onchain" : "simulated",
     };
   }
 
-  onProgress?.({ step: 5, message: 'Verifying milestones and releasing grants...' });
+  onProgress?.({
+    step: 5,
+    message: "Verifying milestones and releasing grants...",
+  });
 
   for (const record of validVaccinations) {
     try {
@@ -839,15 +962,17 @@ export async function runSync(
       if (!patient?.programId) continue;
 
       const program = await db.programs.get(patient.programId);
-      if (!program || program.status !== 'active') continue;
+      if (!program || program.status !== "active") continue;
 
       const milestone = program.milestones.find(
-        (item) => item.vaccineName === record.vaccineName && item.doseNumber === record.doseNumber
+        (item) =>
+          item.vaccineName === record.vaccineName &&
+          item.doseNumber === record.doseNumber,
       );
       if (!milestone) continue;
 
       const alreadyReleased = await db.grantReleases
-        .where('patientId')
+        .where("patientId")
         .equals(patient.id)
         .filter((grant) => grant.milestoneId === milestone.id)
         .count();
@@ -859,28 +984,31 @@ export async function runSync(
         const payoutResolution = await resolvePatientPayoutAddress(patient);
         if (!payoutResolution.address) {
           warnings.push(
-            `Milestone processing skipped for ${record.id}: patient ${patient.healthDropId} has no eligible payout wallet. Source: ${payoutResolution.source}.`
+            `Milestone processing skipped for ${record.id}: patient ${patient.healthDropId} has no eligible payout wallet. Source: ${payoutResolution.source}.`,
           );
           continue;
         }
 
         const patientPayoutAddress = payoutResolution.address;
         console.log(
-          `[SyncTrace] Payout address for patient ${patient.healthDropId}: ${patientPayoutAddress} (source: ${payoutResolution.source})`
+          `[SyncTrace] Payout address for patient ${patient.healthDropId}: ${patientPayoutAddress} (source: ${payoutResolution.source})`,
         );
 
-        const payoutClassification = classifyAddress(patientPayoutAddress, addressContext);
+        const payoutClassification = classifyAddress(
+          patientPayoutAddress,
+          addressContext,
+        );
 
-        if (payoutClassification.role === 'invalid') {
+        if (payoutClassification.role === "invalid") {
           errors.push(
-            `Record ${record.id}: Payout address ${patientPayoutAddress} is invalid (notfound sentinel). Sync was attempted with a placeholder.`
+            `Record ${record.id}: Payout address ${patientPayoutAddress} is invalid (notfound sentinel). Sync was attempted with a placeholder.`,
           );
           continue;
         }
 
         if (!payoutClassification.requiresOnChainAccount) {
           warnings.push(
-            `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} from ${payoutResolution.source} is classified as ${payoutClassification.role} and treated as identity metadata.`
+            `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} from ${payoutResolution.source} is classified as ${payoutClassification.role} and treated as identity metadata.`,
           );
           continue;
         }
@@ -891,10 +1019,13 @@ export async function runSync(
         // error from the XION node. This mirrors the sender preflight at the
         // top of runSync but targets the patient's payout wallet.
         try {
-          const payoutPreflight = await runSyncPreflight(patientPayoutAddress, XION.rest);
+          const payoutPreflight = await runSyncPreflight(
+            patientPayoutAddress,
+            XION.rest,
+          );
           if (!payoutPreflight.accountExists) {
             console.warn(
-              `[SyncTrace] Payout address ${patientPayoutAddress} does not exist on-chain. Clearing stale wallet from user record.`
+              `[SyncTrace] Payout address ${patientPayoutAddress} does not exist on-chain. Clearing stale wallet from user record.`,
             );
             // Clear the stale address from the database so it won't poison future syncs
             const linkedUserId = (await db.patients.get(patient.id))?.userId;
@@ -905,13 +1036,13 @@ export async function runSync(
               });
             }
             warnings.push(
-              `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} is not initialized on XION Testnet-2 (source: ${payoutResolution.source}). The stale address has been cleared.`
+              `Milestone processing skipped for ${record.id}: payout address ${patientPayoutAddress} is not initialized on XION Testnet-2 (source: ${payoutResolution.source}). The stale address has been cleared.`,
             );
             continue;
           }
         } catch (preflightError: any) {
           warnings.push(
-            `Milestone processing skipped for ${record.id}: unable to verify payout address ${patientPayoutAddress} on-chain. ${normalizeErrorMessage(preflightError)}`
+            `Milestone processing skipped for ${record.id}: unable to verify payout address ${patientPayoutAddress} on-chain. ${normalizeErrorMessage(preflightError)}`,
           );
           continue;
         }
@@ -925,18 +1056,21 @@ export async function runSync(
             vaccineName: record.vaccineName,
             doseNumber: record.doseNumber,
             programId: patient.programId,
-            batchId
+            batchId,
           });
           grantTxHash = grantTx.txHash;
         } catch (error: any) {
           warnings.push(
-            `Milestone processing skipped for ${record.id}: ${mapSyncError(error, {
-              senderAddress,
-              stage: 'milestone',
-              contractName: 'MilestoneChecker',
-              address: patientPayoutAddress,
-              classifyContext: addressContext,
-            })} Source: ${payoutResolution.source}.`
+            `Milestone processing skipped for ${record.id}: ${mapSyncError(
+              error,
+              {
+                senderAddress,
+                stage: "milestone",
+                contractName: "MilestoneChecker",
+                address: patientPayoutAddress,
+                classifyContext: addressContext,
+              },
+            )} Source: ${payoutResolution.source}.`,
           );
           continue;
         }
@@ -949,7 +1083,7 @@ export async function runSync(
         milestoneId: milestone.id,
         milestoneName: milestone.name,
         amount: milestone.grantAmount,
-        status: 'released',
+        status: "released",
         xionTxHash: grantTxHash,
         releasedAt: new Date().toISOString(),
       });
@@ -959,16 +1093,29 @@ export async function runSync(
       await db.programs.update(patient.programId, {
         milestones: program.milestones.map((item) =>
           item.id === milestone.id
-            ? { ...item, completedCount: item.completedCount + 1, pendingCount: Math.max(0, item.pendingCount - 1) }
-            : item
+            ? {
+                ...item,
+                completedCount: item.completedCount + 1,
+                pendingCount: Math.max(0, item.pendingCount - 1),
+              }
+            : item,
         ),
         totalReleased: (program.totalReleased ?? 0) + milestone.grantAmount,
       });
 
-      await SMS.payment(patient.parentPhone, patient.name, milestone.grantAmount, milestone.name);
+      await SMS.payment(
+        patient.parentPhone,
+        patient.name,
+        milestone.grantAmount,
+        milestone.name,
+      );
 
       const nextMilestone = program.milestones
-        .filter((item) => item.vaccineName === record.vaccineName && item.doseNumber > record.doseNumber)
+        .filter(
+          (item) =>
+            item.vaccineName === record.vaccineName &&
+            item.doseNumber > record.doseNumber,
+        )
         .sort((a, b) => a.doseNumber - b.doseNumber)[0];
 
       if (nextMilestone) {
@@ -980,32 +1127,42 @@ export async function runSync(
       errors.push(
         `Milestone processing failed for ${record.id}: ${mapSyncError(error, {
           senderAddress,
-          stage: 'milestone',
-          contractName: 'MilestoneChecker',
+          stage: "milestone",
+          contractName: "MilestoneChecker",
           address: XION.contracts.milestoneChecker,
-          role: 'contract',
+          role: "contract",
           classifyContext: addressContext,
-        })}`
+        })}`,
       );
     }
   }
 
-  console.log('[SyncTrace] Milestone processing completed. Released:', grantsReleased);
+  if (SHOW_XION_DEBUG) {
+    console.log(
+      "[SyncTrace] Milestone processing completed. Released:",
+      grantsReleased,
+    );
+  }
 
   await db.auditLogs.put({
     id: uuidv4(),
     entityId: batchId,
-    entityType: 'sync-batch',
-    action: `Synced ${validVaccinations.length} records (${onChain ? 'on-chain' : 'simulated'}). Root: ${root}. Tx: ${txHash}${blockHeight ? ` @ ${blockHeight}` : ''}. Grants: $${grantsReleased}`,
+    entityType: "sync-batch",
+    action: `Synced ${validVaccinations.length} records (${onChain ? "on-chain" : "simulated"}). Root: ${root}. Tx: ${txHash}${blockHeight ? ` @ ${blockHeight}` : ""}. Grants: $${grantsReleased}`,
     performedBy: onChain ? senderAddress : session.userId,
     timestamp: new Date().toISOString(),
   });
 
-  console.log("[SYNC SUCCESS] Vaccination batch committed on-chain. Result:", {
-    batchId,
-    txHash,
-    recordCount: validVaccinations.length,
-  });
+  if (SHOW_XION_DEBUG) {
+    console.log(
+      "[SYNC SUCCESS] Vaccination batch committed on-chain. Result:",
+      {
+        batchId,
+        txHash,
+        recordCount: validVaccinations.length,
+      },
+    );
+  }
 
   return {
     success: true,
@@ -1019,12 +1176,12 @@ export async function runSync(
     errors,
     warnings,
     phaseA: { success: true },
-    phaseB: { 
+    phaseB: {
       success: warnings.length === 0,
       skipped: warnings.length > 0,
-      warnings
+      warnings,
     },
     flaggedCount,
-    mode: onChain ? 'onchain' : 'simulated',
+    mode: onChain ? "onchain" : "simulated",
   };
 }

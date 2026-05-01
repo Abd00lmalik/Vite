@@ -141,30 +141,34 @@ export async function txSubmitBatch({
   assertKnownContractTarget(XION.contracts.vaccinationRecord, 'vaccinationRecord');
   
   const isSession = Boolean(signingClient?.session);
-  console.log("[XION TX STAGE]", {
-    stage: 'txSubmitBatch',
-    senderAddress,
-    contractTarget: XION.contracts.vaccinationRecord,
-    contractRole: 'vaccinationRecord',
-    requiresUserSignature: true,
-    signingMode: isSession ? 'abstraxion_session' : 'direct',
-    manualPromptExpected: !isSession,
-  });
+  if (xionConfig.showDebug) {
+    console.log("[XION TX STAGE]", {
+      stage: 'txSubmitBatch',
+      senderAddress,
+      contractTarget: XION.contracts.vaccinationRecord,
+      contractRole: 'vaccinationRecord',
+      requiresUserSignature: true,
+      signingMode: isSession ? 'abstraxion_session' : 'direct',
+      manualPromptExpected: !isSession,
+    });
+  }
 
-  console.log("[XION EXECUTE START]", {
-    role: "vaccinationRecord",
-    senderAddress,
-    contractAddress: XION.contracts.vaccinationRecord,
-    msg: {
-      submit_batch: {
-        batch_id:     batchId,
-        merkle_root:  merkleRoot,
-        record_count: recordCount,
-        submitter:    senderAddress,
-        clinic_id:    clinicId,
+  if (xionConfig.showDebug) {
+    console.log("[XION EXECUTE START]", {
+      role: "vaccinationRecord",
+      senderAddress,
+      contractAddress: XION.contracts.vaccinationRecord,
+      msg: {
+        submit_batch: {
+          batch_id:     batchId,
+          merkle_root:  merkleRoot,
+          record_count: recordCount,
+          submitter:    senderAddress,
+          clinic_id:    clinicId,
+        },
       },
-    },
-  });
+    });
+  }
 
   const msg = {
     submit_batch: {
@@ -176,35 +180,41 @@ export async function txSubmitBatch({
     },
   };
 
-  console.log("[FINAL EXECUTE MSG FULL]", JSON.stringify({
-    senderAddress,
-    contractAddress: XION.contracts.vaccinationRecord,
-    msg,
-  }, null, 2));
+  if (xionConfig.showDebug) {
+    console.log("[FINAL EXECUTE MSG FULL]", JSON.stringify({
+      senderAddress,
+      contractAddress: XION.contracts.vaccinationRecord,
+      msg,
+    }, null, 2));
+  }
 
   // Step 5: Log recursive scan
-  console.log("[FINAL XION VALUE SCAN]", findXionLikeValues(msg).map(v => {
-    // Basic classification for the scan log
-    const lower = v.value.toLowerCase();
-    let role = "unknown";
-    if (lower === senderAddress.toLowerCase()) role = "sender/submitter";
-    else if (lower === XION.contracts.vaccinationRecord.toLowerCase()) role = "contract";
-    
-    return {
-      ...v,
-      role,
-      allowed: allowedAddressPaths.some(p => v.path.endsWith(p)),
-    };
-  }));
+  if (xionConfig.showDebug) {
+    console.log("[FINAL XION VALUE SCAN]", findXionLikeValues(msg).map(v => {
+      // Basic classification for the scan log
+      const lower = v.value.toLowerCase();
+      let role = "unknown";
+      if (lower === senderAddress.toLowerCase()) role = "sender/submitter";
+      else if (lower === XION.contracts.vaccinationRecord.toLowerCase()) role = "contract";
+      
+      return {
+        ...v,
+        role,
+        allowed: allowedAddressPaths.some(p => v.path.endsWith(p)),
+      };
+    }));
+  }
 
   // Step 1: Resolve the proper signing adapter
   const adapter = getXionSubmitter(signingClient);
   
-  console.log("[XION SIGNING MODE RESOLVED]", {
-    adapterMode: adapter.mode,
-    signingClientType: signingClient?.constructor?.name ?? typeof signingClient,
-    signerAddress: (signingClient as any)?.signer?.address,
-  });
+  if (xionConfig.showDebug) {
+    console.log("[XION SIGNING MODE RESOLVED]", {
+      adapterMode: adapter.mode,
+      signingClientType: signingClient?.constructor?.name ?? typeof signingClient,
+      signerAddress: (signingClient as any)?.signer?.address,
+    });
+  }
 
   if (adapter.mode === "unsupported" || adapter.mode === "session_requires_feegrant") {
     throw new Error(`XION Sync failed: ${adapter.reason}`);
@@ -226,10 +236,12 @@ export async function txSubmitBatch({
       msg,
     });
 
-    console.log("[XION EXECUTE RESULT]", {
-      role: "vaccinationRecord",
-      result: res,
-    });
+    if (xionConfig.showDebug) {
+      console.log("[XION EXECUTE RESULT]", {
+        role: "vaccinationRecord",
+        result: res,
+      });
+    }
 
     return {
       txHash:      res.transactionHash,
@@ -279,20 +291,24 @@ export async function txCheckAndRelease({
   assertKnownContractTarget(XION.contracts.milestoneChecker, 'milestoneChecker');
 
   const isSession = Boolean(signingClient?.session);
-  console.log("[XION TX STAGE]", {
-    stage: 'txCheckAndRelease',
-    senderAddress,
-    contractTarget: XION.contracts.milestoneChecker,
-    contractRole: 'milestoneChecker',
-    requiresUserSignature: true,
-    signingMode: isSession ? 'abstraxion_session' : 'direct',
-    manualPromptExpected: !isSession,
-  });
+  if (xionConfig.showDebug) {
+    console.log("[XION TX STAGE]", {
+      stage: 'txCheckAndRelease',
+      senderAddress,
+      contractTarget: XION.contracts.milestoneChecker,
+      contractRole: 'milestoneChecker',
+      requiresUserSignature: true,
+      signingMode: isSession ? 'abstraxion_session' : 'direct',
+      manualPromptExpected: !isSession,
+    });
+  }
 
-  console.log("[XION EXECUTE START]", {
-    role: "milestoneChecker",
-    senderAddress,
-  });
+  if (xionConfig.showDebug) {
+    console.log("[XION EXECUTE START]", {
+      role: "milestoneChecker",
+      senderAddress,
+    });
+  }
 
   const msg = {
     check_and_release: {
@@ -319,10 +335,12 @@ export async function txCheckAndRelease({
       msg,
     });
 
-    console.log("[XION EXECUTE RESULT]", {
-      role: "milestoneChecker",
-      result: res,
-    });
+    if (xionConfig.showDebug) {
+      console.log("[XION EXECUTE RESULT]", {
+        role: "milestoneChecker",
+        result: res,
+      });
+    }
 
     return {
       txHash:      res.transactionHash,

@@ -5,7 +5,7 @@ import {
   useAbstraxionClient,
 } from '@burnt-labs/abstraxion';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { XION, explorerAddrUrl } from '@/lib/xion/config';
+import { XION, explorerAddrUrl, SHOW_XION_DEBUG } from '@/lib/xion/config';
 import { checkXionAccountPreflight } from '@/lib/xion/preflight';
 import { isSyncConfigured } from '@/lib/xion/readiness';
 import { useAuthStore } from '@/store/authStore';
@@ -62,18 +62,20 @@ export function useXion() {
     if (!c) return;
     const clientAny = c as any;
     const proto = Object.getPrototypeOf(c);
-    console.log("[XION SDK AUDIT]", {
-      signingMode,
-      hasTreasury,
-      clientConstructor: clientAny?.constructor?.name,
-      prototypeKeys: Object.getOwnPropertyNames(proto ?? {}),
-      hasExecute: typeof clientAny?.execute,
-      hasSignAndBroadcast: typeof clientAny?.signAndBroadcast,
-      hasSignArb: typeof signArb,
-      sessionClient: (sessionClient as any)?.constructor?.name ?? "none",
-      directClient: (directClient as any)?.constructor?.name ?? "none",
-      directSigningError: directSigningError ?? "none",
-    });
+    if (SHOW_XION_DEBUG) {
+      console.log("[XION SDK AUDIT]", {
+        signingMode,
+        hasTreasury,
+        clientConstructor: clientAny?.constructor?.name,
+        prototypeKeys: Object.getOwnPropertyNames(proto ?? {}),
+        hasExecute: typeof clientAny?.execute,
+        hasSignAndBroadcast: typeof clientAny?.signAndBroadcast,
+        hasSignArb: typeof signArb,
+        sessionClient: (sessionClient as any)?.constructor?.name ?? "none",
+        directClient: (directClient as any)?.constructor?.name ?? "none",
+        directSigningError: directSigningError ?? "none",
+      });
+    }
   }, [activeSigningClient, signingMode, sessionClient, directClient, signArb, directSigningError]);
 
   // Handle ?granted=true redirect from Abstraxion auth

@@ -19,9 +19,7 @@ function maskValue(val: string | undefined): string {
 export function XionConfigDebug() {
   const { isConnected } = useXion();
   
-  const showDebug =
-    process.env.NODE_ENV !== 'production' ||
-    process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true';
+  const showDebug = process.env.NEXT_PUBLIC_SHOW_XION_DEBUG === 'true';
 
   if (!showDebug) return null;
 
